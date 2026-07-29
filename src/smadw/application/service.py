@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -18,11 +19,75 @@ def default_store_root(repo_root: Path) -> Path:
     return repo_root / ".smadw" / "cases"
 
 
+PROGRESS_EVENT_TYPES = {
+    EventType.UNKNOWN_DISCOVERED,
+    EventType.UNKNOWN_RESOLVED,
+    EventType.HYPOTHESIS_PROPOSED,
+    EventType.HYPOTHESIS_PROMOTED,
+    EventType.HYPOTHESIS_WEAKENED,
+    EventType.HYPOTHESIS_SUSPENDED,
+    EventType.HYPOTHESIS_REJECTED,
+    EventType.EXPERIMENT_PROPOSED,
+    EventType.EXPERIMENT_APPROVED,
+    EventType.EXPERIMENT_COMPLETED,
+    EventType.EVIDENCE_RECORDED,
+    EventType.INTERPRETATION_SUBMITTED,
+    EventType.ROOT_CAUSE_ACCEPTED,
+    EventType.PATCH_APPLIED,
+}
+
+
 class CaseService:
     def __init__(self, repo_root: Path, store_root: Path | None = None) -> None:
         self.repo_root = repo_root
         self.store = JsonlEventStore(store_root or default_store_root(repo_root))
         self.engine = ProjectionEngine(self.store)
+
+    def _meta_path(self, case_id: str) -> Path:
+        return self.store.case_dir(case_id) / "scheduler_meta.json"
+
+    def _read_meta(self, case_id: str) -> dict:
+        path = self._meta_path(case_id)
+        if not path.exists():
+            return {}
+        return json.loads(path.read_text(encoding="utf-8"))
+
+    def _write_meta(self, case_id: str, meta: dict) -> None:
+        path = self._meta_path(case_id)
+        path.write_text(json.dumps(meta), encoding="utf-8")
+
+    def _bump_cycles(self, case_id: str, *, progress: bool) -> None:
+        """ADR 0003 — track scheduling cycles and stall counter (sidecar meta)."""
+        meta = self._read_meta(case_id)
+        meta["scheduling_cycles"] = int(meta.get("scheduling_cycles", 0)) + 1
+        state = self.engine.project(case_id)
+        if progress:
+            meta["stall_cycles"] = 0
+            if state is not None:
+                meta["last_progress_revision"] = state.revision
+        else:
+            meta["stall_cycles"] = int(meta.get("stall_cycles", 0)) + 1
+        self._write_meta(case_id, meta)
+
+    def _state_with_meta(self, case_id: str):
+        state = self.engine.project(case_id)
+        if state is None:
+            return None
+        meta = self._read_meta(case_id)
+        if not meta:
+            return state
+        merged = state.model_copy(deep=True)
+        for k in ("scheduling_cycles", "stall_cycles", "last_progress_revision"):
+            if k in meta:
+                merged.decision_state[k] = meta[k]
+        return merged
+
+    def _merge_meta_into_summary(self, case_id: str, summary: dict) -> dict:
+        meta = self._read_meta(case_id)
+        summary.setdefault("decision_state", {}).update(
+            {k: meta[k] for k in ("scheduling_cycles", "stall_cycles", "last_progress_revision") if k in meta}
+        )
+        return summary
 
     def open_issue(self, issue_path: Path) -> tuple[str, list[DomainEvent]]:
         text = issue_path.read_text(encoding="utf-8")
@@ -65,22 +130,29 @@ class CaseService:
             ),
         ]
         self.engine.append_many(events)
+        self._bump_cycles(case_id, progress=True)
         return case_id, events
 
     def status(self, case_id: str) -> dict:
-        state = self.engine.project(case_id)
+        state = self._state_with_meta(case_id)
         if state is None:
             raise KeyError(case_id)
         return dump_case_summary(state)
 
     def next_task(self, case_id: str) -> dict:
-        state = self.engine.project(case_id)
+        state = self._state_with_meta(case_id)
         if state is None:
             raise KeyError(case_id)
-        return schedule_next_task(state).model_dump(mode="json")
+        task = schedule_next_task(state)
+        if not task.done:
+            self._bump_cycles(case_id, progress=False)
+            state = self._state_with_meta(case_id)
+            assert state is not None
+            task = schedule_next_task(state)
+        return task.model_dump(mode="json")
 
     def query(self, case_id: str, q: str) -> dict:
-        state = self.engine.project(case_id)
+        state = self._state_with_meta(case_id)
         if state is None:
             raise KeyError(case_id)
         return query_case(state, q)
@@ -88,12 +160,16 @@ class CaseService:
     def submit(self, events: list[DomainEvent]) -> dict:
         if not events:
             raise ValidationError("No events provided")
+        case_id = events[0].case_id
         state = self.engine.append_many(events)
-        return dump_case_summary(state)
+        progress = any(e.event_type in PROGRESS_EVENT_TYPES for e in events)
+        self._bump_cycles(case_id, progress=progress)
+        return self._merge_meta_into_summary(case_id, dump_case_summary(state))
 
     def verify(self, case_id: str, experiment_id: str) -> dict:
         emitted = run_verification(self.engine, case_id, experiment_id, self.repo_root)
-        state = self.engine.project(case_id)
+        self._bump_cycles(case_id, progress=True)
+        state = self._state_with_meta(case_id)
         assert state is not None
         return {
             "emitted": [e.model_dump(mode="json") for e in emitted],
@@ -104,7 +180,7 @@ class CaseService:
         return [e.model_dump(mode="json") for e in self.store.load_events(case_id)]
 
     def replay(self, case_id: str) -> dict:
-        state = self.engine.project(case_id)
+        state = self._state_with_meta(case_id)
         if state is None:
             raise KeyError(case_id)
         return dump_case_summary(state)

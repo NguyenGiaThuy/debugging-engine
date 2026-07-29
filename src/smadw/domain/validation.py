@@ -23,6 +23,10 @@ from smadw.domain.transitions import (
     can_transition_experiment,
     can_transition_unknown,
 )
+from smadw.domain.policies import (
+    INACTIVE_HYPOTHESIS_STATUSES,
+    MAX_ACTIVE_HYPOTHESES_PER_UNKNOWN,
+)
 
 
 class ValidationError(Exception):
@@ -73,6 +77,21 @@ def validate_event(state: CaseState | None, event: DomainEvent) -> None:
             raise ValidationError("target Unknown does not exist")
         if payload["id"] in state.hypotheses:
             raise ValidationError("Hypothesis already exists")
+        active = sum(
+            1
+            for h in state.hypotheses.values()
+            if h.unknown_id == payload["unknown_id"]
+            and h.status.value not in INACTIVE_HYPOTHESIS_STATUSES
+        )
+        if active >= MAX_ACTIVE_HYPOTHESES_PER_UNKNOWN:
+            raise ValidationError(
+                "Hypothesis budget exceeded for Unknown",
+                {
+                    "unknown_id": payload["unknown_id"],
+                    "active": active,
+                    "max": MAX_ACTIVE_HYPOTHESES_PER_UNKNOWN,
+                },
+            )
         return
 
     if et == EventType.HYPOTHESIS_PROMOTED:

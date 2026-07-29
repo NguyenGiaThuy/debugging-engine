@@ -9,9 +9,11 @@ from rich import print_json
 from rich.console import Console
 
 from smadw.application.service import CaseService
+from smadw.application.metrics import write_phase2_report
 from smadw.domain.models import DomainEvent
 from smadw.domain.validation import ValidationError
 from smadw.runtime.stubs.demo import run_stub_investigation
+from smadw.runtime.stubs.scenarios import run_all_scenarios
 
 app = typer.Typer(help="SMADW investigation kernel — agent-agnostic CLI", no_args_is_help=True)
 console = Console()
@@ -161,6 +163,42 @@ class Cache:
         print_json(data=result)
     finally:
         (root / "subject" / "cache.py").write_text(buggy, encoding="utf-8")
+
+
+@app.command()
+def validate(
+    issue: Optional[Path] = typer.Option(
+        None,
+        help="Issue path (default: subject/issues/001-cache-miss.md)",
+    ),
+    report: Optional[Path] = typer.Option(
+        None,
+        help="Write markdown report (default: docs/validation/phase2-report.md)",
+    ),
+) -> None:
+    """Run Phase 2 architectural validation scenarios and emit metrics."""
+    root = repo_root()
+    path = issue if issue else root / "subject" / "issues" / "001-cache-miss.md"
+    if not path.is_absolute():
+        path = root / path
+    report_path = report if report else root / "docs" / "validation" / "phase2-report.md"
+    if report_path and not report_path.is_absolute():
+        report_path = root / report_path
+
+    buggy = (root / "subject" / "cache.py").read_text(encoding="utf-8")
+    import tempfile
+
+    with tempfile.TemporaryDirectory(prefix="smadw-validate-") as tmp:
+        svc = CaseService(root, store_root=Path(tmp) / "cases")
+        try:
+            rows = run_all_scenarios(svc, path)
+        finally:
+            (root / "subject" / "cache.py").write_text(buggy, encoding="utf-8")
+
+    write_phase2_report(report_path, rows)
+    print_json(data={"report": str(report_path), "scenarios": rows})
+    if any(not r.get("ok", False) for r in rows):
+        raise typer.Exit(code=1)
 
 
 if __name__ == "__main__":

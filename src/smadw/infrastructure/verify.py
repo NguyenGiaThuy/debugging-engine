@@ -6,11 +6,18 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from smadw.domain.models import AgentRole, DomainEvent, EventType, ExperimentStatus, new_id
+from smadw.domain.policies import MAX_OBSERVATION_CHARS
 from smadw.infrastructure.store import ProjectionEngine
 
 
 def utc_now() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def truncate_observation(text: str, limit: int = MAX_OBSERVATION_CHARS) -> str:
+    if len(text) <= limit:
+        return text
+    return text[: limit - 16] + "\n...[truncated]"
 
 
 def _resolve_command(command: list[str]) -> list[str]:
@@ -37,14 +44,10 @@ def run_verification(
     exp = state.experiments.get(experiment_id)
     if exp is None:
         raise ValueError(f"Unknown experiment {experiment_id}")
-    if exp.status not in {ExperimentStatus.APPROVED, ExperimentStatus.SCHEDULED, ExperimentStatus.RUNNING}:
-        # Allow verify from APPROVED by auto-starting
-        pass
 
     events: list[DomainEvent] = []
     causation: str | None = None
 
-    # Ensure lifecycle: APPROVED -> SCHEDULED -> RUNNING if needed
     if exp.status == ExperimentStatus.APPROVED:
         ev = DomainEvent(
             case_id=case_id,
@@ -71,7 +74,6 @@ def run_verification(
         events.append(ev)
         causation = ev.event_id
 
-    # Apply intervention patch if present
     state = engine.project(case_id)
     assert state is not None
     exp = state.experiments[experiment_id]
@@ -118,51 +120,22 @@ def run_verification(
         text=True,
         check=False,
     )
-    observation = (
+    raw_observation = (
         f"exit_code={result.returncode}\n"
-        f"stdout:\n{result.stdout[-2000:]}\n"
-        f"stderr:\n{result.stderr[-2000:]}"
+        f"stdout:\n{result.stdout}\n"
+        f"stderr:\n{result.stderr}"
     )
+    observation = truncate_observation(raw_observation)
     evidence_id = new_id()
     success = result.returncode == spec.expected_exit_code
+    attrs = {
+        "exit_code": result.returncode,
+        "passed": success,
+        "observation_truncated": len(raw_observation) > len(observation),
+        "raw_observation_chars": len(raw_observation),
+    }
 
-    if success:
-        ev_rec = DomainEvent(
-            case_id=case_id,
-            event_type=EventType.EVIDENCE_RECORDED,
-            timestamp=utc_now(),
-            producer=AgentRole.VERIFIER,
-            causation_id=causation,
-            payload={
-                "id": evidence_id,
-                "experiment_id": experiment_id,
-                "observation": observation,
-                "provenance": "verifier",
-                "category": "Test Result",
-                "collection_method": " ".join(spec.command),
-                "attributes": {"exit_code": result.returncode, "passed": True},
-            },
-        )
-        # Evidence requires RUNNING — ensure still running
-        state = engine.project(case_id)
-        assert state is not None
-        if state.experiments[experiment_id].status == ExperimentStatus.RUNNING:
-            engine.append_validated(ev_rec)
-            events.append(ev_rec)
-            done = DomainEvent(
-                case_id=case_id,
-                event_type=EventType.EXPERIMENT_COMPLETED,
-                timestamp=utc_now(),
-                producer=AgentRole.VERIFIER,
-                causation_id=ev_rec.event_id,
-                payload={"experiment_id": experiment_id},
-            )
-            engine.append_validated(done)
-            events.append(done)
-        else:
-            # Force start then record — shouldn't happen often
-            raise RuntimeError(f"Experiment {experiment_id} not RUNNING before evidence")
-    else:
+    if not success:
         fail = DomainEvent(
             case_id=case_id,
             event_type=EventType.VERIFICATION_FAILED,
@@ -177,38 +150,39 @@ def run_verification(
         )
         engine.append_validated(fail)
         events.append(fail)
-        # Still record evidence of failure for interpretation
-        ev_rec = DomainEvent(
-            case_id=case_id,
-            event_type=EventType.EVIDENCE_RECORDED,
-            timestamp=utc_now(),
-            producer=AgentRole.VERIFIER,
-            causation_id=fail.event_id,
-            payload={
-                "id": evidence_id,
-                "experiment_id": experiment_id,
-                "observation": observation,
-                "provenance": "verifier",
-                "category": "Test Result",
-                "collection_method": " ".join(spec.command),
-                "attributes": {"exit_code": result.returncode, "passed": False},
-            },
-        )
-        # Need RUNNING state for evidence
-        state = engine.project(case_id)
-        assert state is not None
-        if state.experiments[experiment_id].status == ExperimentStatus.RUNNING:
-            engine.append_validated(ev_rec)
-            events.append(ev_rec)
-            done = DomainEvent(
-                case_id=case_id,
-                event_type=EventType.EXPERIMENT_COMPLETED,
-                timestamp=utc_now(),
-                producer=AgentRole.VERIFIER,
-                causation_id=ev_rec.event_id,
-                payload={"experiment_id": experiment_id},
-            )
-            engine.append_validated(done)
-            events.append(done)
+        causation = fail.event_id
 
+    state = engine.project(case_id)
+    assert state is not None
+    if state.experiments[experiment_id].status != ExperimentStatus.RUNNING:
+        raise RuntimeError(f"Experiment {experiment_id} not RUNNING before evidence")
+
+    ev_rec = DomainEvent(
+        case_id=case_id,
+        event_type=EventType.EVIDENCE_RECORDED,
+        timestamp=utc_now(),
+        producer=AgentRole.VERIFIER,
+        causation_id=causation,
+        payload={
+            "id": evidence_id,
+            "experiment_id": experiment_id,
+            "observation": observation,
+            "provenance": "verifier",
+            "category": "Test Result",
+            "collection_method": " ".join(spec.command),
+            "attributes": attrs,
+        },
+    )
+    engine.append_validated(ev_rec)
+    events.append(ev_rec)
+    done = DomainEvent(
+        case_id=case_id,
+        event_type=EventType.EXPERIMENT_COMPLETED,
+        timestamp=utc_now(),
+        producer=AgentRole.VERIFIER,
+        causation_id=ev_rec.event_id,
+        payload={"experiment_id": experiment_id},
+    )
+    engine.append_validated(done)
+    events.append(done)
     return events

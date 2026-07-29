@@ -2,24 +2,15 @@
 
 SMADW is architecture (an investigation kernel). Skills and IDE wrappers come last.
 
-## Phase 1 — Runtime MVP (current)
+## Phase 1 — Runtime MVP (done)
 
-Build the smallest agent-agnostic system that faithfully implements the architecture:
+Minimal agent-agnostic Python CLI kernel: domain model, JSONL Event Log, Case State projection, Judge task handoff, in-engine Verifier, seeded `subject/` defects, stub e2e.
 
-- Domain model + Event Log + Case State projection
-- Judge scheduling + Task handoff
-- CLI contract for any coding agent
-- In-engine Verifier (pytest / Verification Specs)
-- Seeded `subject/` defects for validation
-- Deterministic stubs for CI e2e (not a product LLM path)
+## Phase 2 — Validate the architecture (current)
 
-**Success:** Can a coding agent (or stubs) investigate a real defect via SMADW better than unstructured chat?
+Ask which architectural assumptions are wrong. Record findings as ADRs in [`decisions/`](decisions/).
 
-## Phase 2 — Validate the architecture
-
-Ask which assumptions are wrong. Record findings as ADRs in [`decisions/`](decisions/).
-
-Examples: Judge over/under-informed, Analyst hypothesis flood, Case State bloat, Event Log growth.
+Harness: `smadw validate` runs stress scenarios (happy path, hypothesis flood, starvation, evidence bloat) and writes [`validation/phase2-report.md`](validation/phase2-report.md).
 
 ## Phase 3 — Framework
 
@@ -27,13 +18,7 @@ Stabilize APIs so others can build on SMADW (`Case.Create`, projections, schedul
 
 ## Phase 4 — Skills / interfaces
 
-Only then wrap the kernel:
-
-- “Investigate this issue”
-- “Find performance bottleneck”
-- “Production incident”
-
-SMADW remains the engine; skills are interfaces—like Git vs GitHub Desktop.
+Only then wrap the kernel as skills (“Investigate this issue”, etc.). SMADW remains the engine.
 
 ## Explicit non-goals (until later)
 

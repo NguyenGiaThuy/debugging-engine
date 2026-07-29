@@ -13,9 +13,9 @@ The complete SMADW v3.1 RFC lives in [`docs/rfc/`](docs/rfc/).
 | I–VI | **Normative** |
 | VII | **Informative** |
 
-## Current milestone — Phase 1
+## Current milestone — Phase 2
 
-Minimal Python CLI kernel + seeded `subject/` defects. See [`docs/roadmap.md`](docs/roadmap.md).
+Phase 1 kernel is runnable. Phase 2 validates architectural assumptions via `smadw validate` and ADRs in [`docs/decisions/`](docs/decisions/). See [`docs/roadmap.md`](docs/roadmap.md).
 
 ### Quick start
 
@@ -26,6 +26,9 @@ pip install -e ".[dev]"
 
 # Stub-driven end-to-end (no coding agent / no API keys)
 smadw demo
+
+# Phase 2 architectural validation (metrics + ADRs)
+smadw validate
 
 # Or drive manually as a coding agent would:
 smadw open subject/issues/001-cache-miss.md

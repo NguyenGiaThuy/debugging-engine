@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import json
+from typing import Any
+
 from pydantic import BaseModel, Field
 
 from smadw.domain.models import (
@@ -11,6 +14,12 @@ from smadw.domain.models import (
     HypothesisStatus,
     InformationGain,
     InvestigationStatus,
+)
+from smadw.domain.policies import (
+    INACTIVE_HYPOTHESIS_STATUSES,
+    MAX_ACTIVE_HYPOTHESES_PER_UNKNOWN,
+    MAX_PROJECTION_FIELD_CHARS,
+    STALL_CYCLES_BEFORE_ESCALATION,
 )
 
 
@@ -42,43 +51,154 @@ COST_RANK = {
 }
 
 
+def _short(text: str, limit: int = MAX_PROJECTION_FIELD_CHARS) -> str:
+    text = text.strip()
+    if len(text) <= limit:
+        return text
+    return text[: limit - 3] + "..."
+
+
+def _hyp_summary(state: CaseState) -> list[dict[str, Any]]:
+    return [
+        {
+            "id": h.id,
+            "unknown_id": h.unknown_id,
+            "title": _short(h.title),
+            "status": h.status.value,
+        }
+        for h in state.hypotheses.values()
+    ]
+
+
+def _unk_summary(state: CaseState) -> list[dict[str, Any]]:
+    return [
+        {
+            "id": u.id,
+            "title": _short(u.title),
+            "status": u.status.value,
+            "priority": u.priority,
+        }
+        for u in state.unknowns.values()
+    ]
+
+
+def _exp_summary(state: CaseState, *, statuses: set[str] | None = None) -> list[dict[str, Any]]:
+    rows = []
+    for e in state.experiments.values():
+        if statuses and e.status.value not in statuses:
+            continue
+        rows.append(
+            {
+                "id": e.id,
+                "title": _short(e.title),
+                "status": e.status.value,
+                "information_gain": e.information_gain.value,
+                "cost": e.cost.value,
+                "unknown_id": e.unknown_id,
+                "has_patch": bool(e.patch),
+                "has_verification_spec": e.verification_spec is not None,
+            }
+        )
+    return rows
+
+
+def _ev_summary(state: CaseState) -> list[dict[str, Any]]:
+    return [
+        {
+            "id": e.id,
+            "experiment_id": e.experiment_id,
+            "observation": _short(e.observation),
+            "passed": e.attributes.get("passed"),
+            "exit_code": e.attributes.get("exit_code"),
+        }
+        for e in state.evidence.values()
+    ]
+
+
+def _interp_summary(state: CaseState) -> list[dict[str, Any]]:
+    return [
+        {
+            "id": i.id,
+            "evidence_id": i.evidence_id,
+            "hypothesis_id": i.hypothesis_id,
+            "outcome": i.outcome.value,
+            "rationale": _short(i.rationale),
+            "producer": i.producer,
+        }
+        for i in state.interpretations.values()
+    ]
+
+
+def _metrics_summary(state: CaseState) -> dict[str, Any]:
+    return {
+        "event_count": state.event_count,
+        "revision": state.revision,
+        "unknowns": len(state.unknowns),
+        "hypotheses": len(state.hypotheses),
+        "experiments": len(state.experiments),
+        "evidence": len(state.evidence),
+        "interpretations": len(state.interpretations),
+        "scheduling_cycles": state.decision_state.get("scheduling_cycles", 0),
+        "stall_cycles": state.decision_state.get("stall_cycles", 0),
+        "last_progress_revision": state.decision_state.get("last_progress_revision"),
+    }
+
+
 def _slice_for_role(state: CaseState, role: AgentRole) -> dict:
-    base = {
+    """ADR 0001 — role-minimal summaries, not full registries."""
+    base_meta = {
         "case_id": state.case_id,
-        "title": state.title,
+        "title": _short(state.title),
         "status": state.status.value,
         "issue_path": state.issue_path,
-        "unknowns": {k: v.model_dump(mode="json") for k, v in state.unknowns.items()},
-        "hypotheses": {k: v.model_dump(mode="json") for k, v in state.hypotheses.items()},
-        "experiments": {k: v.model_dump(mode="json") for k, v in state.experiments.items()},
-        "evidence": {k: v.model_dump(mode="json") for k, v in state.evidence.items()},
-        "interpretations": {k: v.model_dump(mode="json") for k, v in state.interpretations.items()},
-        "decision_state": state.decision_state,
+        "metrics": _metrics_summary(state),
     }
     if role == AgentRole.ANALYST:
         return {
-            "unknowns": base["unknowns"],
-            "hypotheses": base["hypotheses"],
-            "evidence": base["evidence"],
-            "interpretations": base["interpretations"],
-            "issue_path": base["issue_path"],
+            **base_meta,
+            "unknowns": _unk_summary(state),
+            "hypotheses": _hyp_summary(state),
+            "evidence": _ev_summary(state),
+            "interpretations": _interp_summary(state),
         }
     if role == AgentRole.ADVERSARY:
         return {
-            "hypotheses": base["hypotheses"],
-            "evidence": base["evidence"],
-            "interpretations": base["interpretations"],
+            **base_meta,
+            "hypotheses": _hyp_summary(state),
+            "evidence": _ev_summary(state),
+            "interpretations": _interp_summary(state),
         }
     if role == AgentRole.IMPLEMENTER:
         return {
-            "experiments": {
-                k: v
-                for k, v in base["experiments"].items()
-                if v["status"] in {"APPROVED", "SCHEDULED"}
-            },
-            "issue_path": base["issue_path"],
+            **base_meta,
+            "experiments": _exp_summary(state, statuses={"APPROVED", "SCHEDULED"}),
         }
-    return base
+    if role == AgentRole.VERIFIER:
+        return {
+            **base_meta,
+            "experiments": _exp_summary(
+                state, statuses={"APPROVED", "SCHEDULED", "RUNNING"}
+            ),
+        }
+    return {
+        **base_meta,
+        "unknowns": _unk_summary(state),
+        "hypotheses": _hyp_summary(state),
+        "experiments": _exp_summary(state),
+        "decision_keys": list(state.decision_state.keys()),
+    }
+
+
+def active_hypothesis_count(state: CaseState, unknown_id: str) -> int:
+    return sum(
+        1
+        for h in state.hypotheses.values()
+        if h.unknown_id == unknown_id and h.status.value not in INACTIVE_HYPOTHESIS_STATUSES
+    )
+
+
+def budget_remaining(state: CaseState, unknown_id: str) -> int:
+    return max(0, MAX_ACTIVE_HYPOTHESES_PER_UNKNOWN - active_hypothesis_count(state, unknown_id))
 
 
 def schedule_next_task(state: CaseState) -> Task:
@@ -109,6 +229,27 @@ def schedule_next_task(state: CaseState) -> Task:
             terminal_status=InvestigationStatus.RESOLVED.value,
         )
 
+    stall = int(state.decision_state.get("stall_cycles", 0))
+    if stall >= STALL_CYCLES_BEFORE_ESCALATION:
+        return Task(
+            case_id=state.case_id,
+            role=AgentRole.JUDGE,
+            objective=(
+                f"No investigation progress for {stall} scheduling cycles. "
+                "Escalate or propose a discriminating HIGH/LOW-cost experiment."
+            ),
+            allowed_event_types=[
+                EventType.INVESTIGATION_ESCALATED.value,
+                EventType.EXPERIMENT_PROPOSED.value,
+            ],
+            projection={
+                **_slice_for_role(state, AgentRole.JUDGE),
+                "stall_cycles": stall,
+                "threshold": STALL_CYCLES_BEFORE_ESCALATION,
+            },
+            hints=["Waiting indefinitely is prohibited (Part IV starvation policy)."],
+        )
+
     # Need hypotheses?
     if not state.hypotheses:
         return Task(
@@ -120,19 +261,29 @@ def schedule_next_task(state: CaseState) -> Task:
                 EventType.EXPERIMENT_PROPOSED.value,
             ],
             projection=_slice_for_role(state, AgentRole.ANALYST),
-            hints=["Declare assumptions explicitly.", "Estimate information_gain and cost qualitatively."],
+            hints=[
+                "Declare assumptions explicitly.",
+                "Estimate information_gain and cost qualitatively.",
+                f"Active hypothesis budget per Unknown: {MAX_ACTIVE_HYPOTHESES_PER_UNKNOWN}.",
+            ],
         )
 
-    # Need adversary challenge if only one hypothesis and no interpretations yet
-    if len(state.hypotheses) == 1 and not any(
-        h.title.lower().find("logging") >= 0 or "alternative" in h.explanation.lower()
+    competing = [
+        h
         for h in state.hypotheses.values()
-    ):
-        # Soft: if adversary hasn't added a competing hypothesis
-        pass
-
-    competing = [h for h in state.hypotheses.values() if h.status not in {HypothesisStatus.REJECTED, HypothesisStatus.SUSPENDED}]
+        if h.status not in {HypothesisStatus.REJECTED, HypothesisStatus.SUSPENDED}
+    ]
     if len(competing) < 2 and not state.evidence:
+        # Respect budget — if already at cap with one hyp, ask for experiment not more hyps
+        unk_id = next(iter(state.unknowns))
+        if budget_remaining(state, unk_id) == 0:
+            return Task(
+                case_id=state.case_id,
+                role=AgentRole.ANALYST,
+                objective="Hypothesis budget exhausted. Propose a discriminating experiment instead.",
+                allowed_event_types=[EventType.EXPERIMENT_PROPOSED.value],
+                projection=_slice_for_role(state, AgentRole.ANALYST),
+            )
         return Task(
             case_id=state.case_id,
             role=AgentRole.ADVERSARY,
@@ -141,7 +292,10 @@ def schedule_next_task(state: CaseState) -> Task:
                 EventType.HYPOTHESIS_PROPOSED.value,
                 EventType.EXPERIMENT_PROPOSED.value,
             ],
-            projection=_slice_for_role(state, AgentRole.ADVERSARY),
+            projection={
+                **_slice_for_role(state, AgentRole.ADVERSARY),
+                "budget_remaining": budget_remaining(state, unk_id),
+            },
             hints=["Objections must use a defined category.", "Prefer experiments that discriminate."],
         )
 
@@ -150,7 +304,6 @@ def schedule_next_task(state: CaseState) -> Task:
     if proposed:
         proposed.sort(key=lambda e: (-GAIN_RANK[e.information_gain], COST_RANK[e.cost]))
         best = proposed[0]
-        # Reject minimal+critical
         if best.information_gain == InformationGain.MINIMAL and best.cost == ExperimentCost.CRITICAL:
             return Task(
                 case_id=state.case_id,
@@ -169,12 +322,18 @@ def schedule_next_task(state: CaseState) -> Task:
             ],
             projection={
                 "recommended_experiment_id": best.id,
-                "experiment": best.model_dump(mode="json"),
+                "experiment": {
+                    "id": best.id,
+                    "title": _short(best.title),
+                    "information_gain": best.information_gain.value,
+                    "cost": best.cost.value,
+                    "status": best.status.value,
+                },
+                "metrics": _metrics_summary(state),
             },
             hints=["Submit ExperimentApproved then optionally ExperimentScheduled."],
         )
 
-    # Ready to verify?
     runnable = [
         e
         for e in state.experiments.values()
@@ -194,11 +353,19 @@ def schedule_next_task(state: CaseState) -> Task:
                 EventType.VERIFICATION_FAILED.value,
                 EventType.PATCH_APPLIED.value,
             ],
-            projection={"experiment_id": exp.id, "experiment": exp.model_dump(mode="json")},
+            projection={
+                "experiment_id": exp.id,
+                "experiment": {
+                    "id": exp.id,
+                    "title": _short(exp.title),
+                    "status": exp.status.value,
+                    "has_patch": bool(exp.patch),
+                },
+                "metrics": _metrics_summary(state),
+            },
             hints=["Prefer `smadw verify <case-id> <experiment-id>` rather than hand-writing evidence."],
         )
 
-    # Interpret completed experiments without interpretations
     completed = [e for e in state.experiments.values() if e.status == ExperimentStatus.COMPLETED]
     interpreted_evidence = {i.evidence_id for i in state.interpretations.values()}
     for exp in completed:
@@ -211,12 +378,20 @@ def schedule_next_task(state: CaseState) -> Task:
                 objective="Submit interpretations linking new evidence to hypotheses.",
                 allowed_event_types=[EventType.INTERPRETATION_SUBMITTED.value],
                 projection={
-                    "evidence": {e.id: e.model_dump(mode="json") for e in pending},
-                    "hypotheses": {k: v.model_dump(mode="json") for k, v in state.hypotheses.items()},
+                    "evidence": [
+                        {
+                            "id": e.id,
+                            "experiment_id": e.experiment_id,
+                            "observation": _short(e.observation),
+                            "passed": e.attributes.get("passed"),
+                        }
+                        for e in pending
+                    ],
+                    "hypotheses": _hyp_summary(state),
+                    "metrics": _metrics_summary(state),
                 },
             )
 
-    # Adversary competing interpretation if only one interpretation exists for latest evidence
     if state.evidence and len(state.interpretations) == 1:
         return Task(
             case_id=state.case_id,
@@ -229,17 +404,21 @@ def schedule_next_task(state: CaseState) -> Task:
             projection=_slice_for_role(state, AgentRole.ADVERSARY),
         )
 
-    # Enough to accept root cause?
     supported = [
         h
         for h in state.hypotheses.values()
-        if h.status in {HypothesisStatus.SUPPORTED, HypothesisStatus.STRONGLY_SUPPORTED, HypothesisStatus.PLAUSIBLE}
+        if h.status
+        in {
+            HypothesisStatus.SUPPORTED,
+            HypothesisStatus.STRONGLY_SUPPORTED,
+            HypothesisStatus.PLAUSIBLE,
+        }
         and any(
-            i.hypothesis_id == h.id and i.outcome.value == "SUPPORTS" for i in state.interpretations.values()
+            i.hypothesis_id == h.id and i.outcome.value == "SUPPORTS"
+            for i in state.interpretations.values()
         )
     ]
     if supported and state.evidence:
-        # Prefer hypothesis with SUPPORTS and passed tests
         best = supported[0]
         return Task(
             case_id=state.case_id,
@@ -254,12 +433,13 @@ def schedule_next_task(state: CaseState) -> Task:
             ],
             projection={
                 "candidate_hypothesis_id": best.id,
-                "hypotheses": {k: v.model_dump(mode="json") for k, v in state.hypotheses.items()},
-                "interpretations": {k: v.model_dump(mode="json") for k, v in state.interpretations.items()},
+                "hypotheses": _hyp_summary(state),
+                "interpretations": _interp_summary(state),
+                "metrics": _metrics_summary(state),
             },
         )
 
-    # Starvation recovery
+    # Starvation recovery — still counting toward stall escalation
     return Task(
         case_id=state.case_id,
         role=AgentRole.ANALYST,
@@ -272,3 +452,7 @@ def schedule_next_task(state: CaseState) -> Task:
         projection=_slice_for_role(state, AgentRole.ANALYST),
         hints=["Starvation policy: waiting indefinitely is prohibited."],
     )
+
+
+def projection_size_bytes(task: Task) -> int:
+    return len(json.dumps(task.projection, default=str).encode("utf-8"))
