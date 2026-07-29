@@ -1,29 +1,31 @@
-"""Materialize the offline cache-miss workspace used by demo/validate/tests."""
+"""Materialize offline investigation workspaces used by demo/validate/tests."""
 
 from __future__ import annotations
 
 import shutil
 from pathlib import Path
 
-FIXTURE_NAME = "cache_miss"
+FIXTURES = {
+    "cache_miss": "cache_miss",
+    "session_ttl": "session_ttl",
+}
 
 
-def fixture_root() -> Path:
-    return Path(__file__).resolve().parent / "fixtures" / FIXTURE_NAME
+def fixtures_dir() -> Path:
+    return Path(__file__).resolve().parent / "fixtures"
 
 
-def materialize_cache_miss(dest: Path) -> Path:
-    """
-    Copy the cache-miss fixture into ``dest`` and return that workspace root.
+def fixture_root(name: str = "cache_miss") -> Path:
+    if name not in FIXTURES:
+        raise KeyError(f"Unknown fixture {name!r}; known: {sorted(FIXTURES)}")
+    return fixtures_dir() / FIXTURES[name]
 
-    Layout:
-      cache.py
-      issues/001-cache-miss.md
-      tests/test_cache.py
-    """
-    src = fixture_root()
+
+def materialize_fixture(name: str, dest: Path) -> Path:
+    """Copy a named fixture into ``dest`` and return that workspace root."""
+    src = fixture_root(name)
     if not src.is_dir():
-        raise FileNotFoundError(f"Cache-miss fixture missing at {src}")
+        raise FileNotFoundError(f"Fixture missing at {src}")
     dest = dest.resolve()
     dest.mkdir(parents=True, exist_ok=True)
     for path in src.rglob("*"):
@@ -36,5 +38,17 @@ def materialize_cache_miss(dest: Path) -> Path:
     return dest
 
 
+def materialize_cache_miss(dest: Path) -> Path:
+    return materialize_fixture("cache_miss", dest)
+
+
+def materialize_session_ttl(dest: Path) -> Path:
+    return materialize_fixture("session_ttl", dest)
+
+
 def cache_miss_issue(workspace: Path) -> Path:
     return workspace / "issues" / "001-cache-miss.md"
+
+
+def session_ttl_issue(workspace: Path) -> Path:
+    return workspace / "issues" / "001-session-ttl.md"

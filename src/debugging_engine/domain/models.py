@@ -143,6 +143,7 @@ class Hypothesis(BaseModel):
     explanation: str
     status: HypothesisStatus = HypothesisStatus.PROPOSED
     assumptions: list[str] = Field(default_factory=list)
+    parent_id: str | None = None
 
 
 class VerificationSpec(BaseModel):

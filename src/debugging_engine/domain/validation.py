@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 from debugging_engine.domain.models import (
@@ -78,6 +79,23 @@ def validate_event(state: CaseState | None, event: DomainEvent) -> None:
             raise ValidationError("target Unknown does not exist")
         if payload["id"] in state.hypotheses:
             raise ValidationError("Hypothesis already exists")
+        parent_id = payload.get("parent_id")
+        if parent_id:
+            if parent_id not in state.hypotheses:
+                raise ValidationError("parent_id does not exist")
+            parent = state.hypotheses[parent_id]
+            if parent.unknown_id != payload["unknown_id"]:
+                raise ValidationError("parent_id must belong to the same Unknown")
+            if parent_id == payload["id"]:
+                raise ValidationError("parent_id cannot reference self")
+            # Reject cycles: walk ancestors.
+            seen = {payload["id"]}
+            cursor: str | None = parent_id
+            while cursor is not None:
+                if cursor in seen:
+                    raise ValidationError("parent_id would create a cycle")
+                seen.add(cursor)
+                cursor = state.hypotheses[cursor].parent_id
         active = sum(
             1
             for h in state.hypotheses.values()
@@ -203,17 +221,94 @@ def validate_event(state: CaseState | None, event: DomainEvent) -> None:
         return
 
     if et == EventType.ROOT_CAUSE_ACCEPTED:
-        if not payload.get("hypothesis_id"):
+        if event.producer != AgentRole.JUDGE:
+            raise ValidationError(
+                "RootCauseAccepted requires producer Judge",
+                {"producer": event.producer},
+            )
+        hid = payload.get("hypothesis_id")
+        if not hid:
             raise ValidationError("RootCauseAccepted requires hypothesis_id")
-        if payload["hypothesis_id"] not in state.hypotheses:
+        if hid not in state.hypotheses:
             raise ValidationError("hypothesis_id does not exist")
         if not payload.get("rationale"):
             raise ValidationError("RootCauseAccepted requires rationale")
+
+        supporting = [
+            i
+            for i in state.interpretations.values()
+            if i.hypothesis_id == hid and i.outcome == InterpretationOutcome.SUPPORTS
+        ]
+        if not supporting:
+            raise ValidationError(
+                "RootCauseAccepted requires supporting interpretation",
+                {"hypothesis_id": hid},
+            )
+        evidence_ids = {i.evidence_id for i in supporting}
+        if not any(eid in state.evidence for eid in evidence_ids):
+            raise ValidationError(
+                "RootCauseAccepted requires evidence linked via supporting interpretation",
+                {"hypothesis_id": hid},
+            )
+
+        # Code-fix path: require a successful intervention experiment.
+        has_intervention = any(e.experiment_class == "intervention" for e in state.experiments.values())
+        if has_intervention:
+            passed_intervention = any(
+                e.experiment_class == "intervention"
+                and e.status == ExperimentStatus.COMPLETED
+                and any(
+                    ev.experiment_id == e.id and ev.attributes.get("passed") is True
+                    for ev in state.evidence.values()
+                )
+                for e in state.experiments.values()
+            )
+            if not passed_intervention:
+                raise ValidationError(
+                    "RootCauseAccepted requires a successful intervention experiment",
+                    {"hypothesis_id": hid},
+                )
+
+        # Competing active hypotheses must be disposed (rejected/suspended/accepted).
+        active_competitors = [
+            h
+            for h in state.hypotheses.values()
+            if h.id != hid and h.status.value not in INACTIVE_HYPOTHESIS_STATUSES
+        ]
+        if active_competitors:
+            raise ValidationError(
+                "RootCauseAccepted requires competing hypotheses to be rejected or suspended",
+                {"active_competitors": [h.id for h in active_competitors]},
+            )
         return
 
     if et == EventType.PATCH_APPLIED:
+        if event.producer not in {AgentRole.IMPLEMENTER, AgentRole.VERIFIER}:
+            raise ValidationError(
+                "PatchApplied requires producer Implementer (or Verifier when auto-applied)",
+                {"producer": event.producer},
+            )
         if not payload.get("experiment_id") or not payload.get("paths"):
             raise ValidationError("PatchApplied requires experiment_id and paths")
+        eid = payload["experiment_id"]
+        if eid not in state.experiments:
+            raise ValidationError("PatchApplied requires existing experiment_id")
+        # Path containment for declared patch paths (actual write checks happen in verify).
+        for rel in payload.get("paths") or []:
+            if not isinstance(rel, str) or not rel or Path(rel).is_absolute() or ".." in Path(rel).parts:
+                raise ValidationError(
+                    "PatchApplied paths must be relative and contained",
+                    {"path": rel},
+                )
+        return
+
+    if et == EventType.VERIFICATION_FAILED:
+        eid = payload.get("experiment_id")
+        if not eid or eid not in state.experiments:
+            raise ValidationError("VerificationFailed requires existing experiment_id")
+        exp = state.experiments[eid]
+        if not can_transition_experiment(exp.status, ExperimentStatus.FAILED):
+            raise ValidationError(f"Invalid experiment transition {exp.status} -> FAILED")
         return
 
     if et in {
@@ -223,7 +318,6 @@ def validate_event(state: CaseState | None, event: DomainEvent) -> None:
         EventType.INVESTIGATION_ABANDONED,
         EventType.INVESTIGATION_CLOSED,
         EventType.VALIDATION_FAILED,
-        EventType.VERIFICATION_FAILED,
         EventType.IMPLEMENTATION_FAILED,
         EventType.EXPERIMENT_CANCELLED,
         EventType.EXPERIMENT_EXPIRED,
@@ -290,6 +384,7 @@ def apply_event(state: CaseState | None, event: DomainEvent) -> CaseState:
             title=payload["title"],
             explanation=payload["explanation"],
             assumptions=payload.get("assumptions", []),
+            parent_id=payload.get("parent_id"),
         )
         s.hypotheses[hyp.id] = hyp
         if event.producer == AgentRole.ADVERSARY:
@@ -301,7 +396,20 @@ def apply_event(state: CaseState | None, event: DomainEvent) -> CaseState:
     elif et == EventType.HYPOTHESIS_SUSPENDED:
         s.hypotheses[payload["hypothesis_id"]].status = HypothesisStatus.SUSPENDED
     elif et == EventType.HYPOTHESIS_REJECTED:
-        s.hypotheses[payload["hypothesis_id"]].status = HypothesisStatus.REJECTED
+        # Cascade: rejecting a parent rejects all descendants (deterministic on replay).
+        rejected_root = payload["hypothesis_id"]
+        s.hypotheses[rejected_root].status = HypothesisStatus.REJECTED
+        changed = True
+        while changed:
+            changed = False
+            for hyp in s.hypotheses.values():
+                if (
+                    hyp.parent_id is not None
+                    and s.hypotheses[hyp.parent_id].status == HypothesisStatus.REJECTED
+                    and hyp.status != HypothesisStatus.REJECTED
+                ):
+                    hyp.status = HypothesisStatus.REJECTED
+                    changed = True
     elif et == EventType.EXPERIMENT_PROPOSED:
         spec_data = payload.get("verification_spec")
         spec = VerificationSpec.model_validate(spec_data) if spec_data else None
@@ -394,6 +502,9 @@ def apply_event(state: CaseState | None, event: DomainEvent) -> CaseState:
         s.decision_state.setdefault("patches", []).append(payload)
     elif et == EventType.VERIFICATION_FAILED:
         s.decision_state.setdefault("verification_failures", []).append(payload)
+        eid = payload.get("experiment_id")
+        if eid and eid in s.experiments:
+            s.experiments[eid].status = ExperimentStatus.FAILED
     elif et == EventType.VALIDATION_FAILED:
         s.decision_state.setdefault("validation_failures", []).append(payload)
 

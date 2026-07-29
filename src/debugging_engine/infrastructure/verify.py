@@ -7,6 +7,8 @@ from pathlib import Path
 
 from debugging_engine.domain.models import AgentRole, DomainEvent, EventType, ExperimentStatus, new_id
 from debugging_engine.domain.policies import MAX_OBSERVATION_CHARS
+from debugging_engine.domain.validation import ValidationError
+from debugging_engine.infrastructure.paths import resolve_under_root
 from debugging_engine.infrastructure.store import ProjectionEngine
 
 
@@ -31,13 +33,40 @@ def _resolve_command(command: list[str]) -> list[str]:
     return command
 
 
+def _fail_experiment(
+    engine: ProjectionEngine,
+    case_id: str,
+    experiment_id: str,
+    *,
+    reason: str,
+    causation_id: str | None,
+    observation: str | None = None,
+) -> DomainEvent:
+    payload: dict = {"experiment_id": experiment_id, "reason": reason}
+    if observation is not None:
+        payload["observation"] = observation
+    fail = DomainEvent(
+        case_id=case_id,
+        event_type=EventType.VERIFICATION_FAILED,
+        timestamp=utc_now(),
+        producer=AgentRole.VERIFIER,
+        causation_id=causation_id,
+        payload=payload,
+    )
+    engine.append_validated(fail)
+    return fail
+
+
 def run_verification(
     engine: ProjectionEngine,
     case_id: str,
     experiment_id: str,
     repo_root: Path,
 ) -> list[DomainEvent]:
-    """Execute Verification Spec for an experiment; return Evidence / failure events."""
+    """Execute Verification Spec for an experiment; return Evidence / failure events.
+
+    On unexpected exit code or missing spec the experiment ends in FAILED (not COMPLETED).
+    """
     state = engine.project(case_id)
     if state is None:
         raise ValueError(f"Unknown case {case_id}")
@@ -47,6 +76,7 @@ def run_verification(
 
     events: list[DomainEvent] = []
     causation: str | None = None
+    root = repo_root.resolve()
 
     if exp.status == ExperimentStatus.APPROVED:
         ev = DomainEvent(
@@ -82,10 +112,22 @@ def run_verification(
         for p in state.decision_state.get("patches", [])
     )
     if exp.patch and not already_patched:
-        for rel_path, content in exp.patch.items():
-            target = repo_root / rel_path
-            target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_text(content, encoding="utf-8")
+        try:
+            for rel_path, content in exp.patch.items():
+                target = resolve_under_root(root, rel_path, what="patch path")
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_text(content, encoding="utf-8")
+        except ValidationError as exc:
+            fail = _fail_experiment(
+                engine,
+                case_id,
+                experiment_id,
+                reason="PathEscape",
+                causation_id=causation,
+                observation=str(exc),
+            )
+            events.append(fail)
+            return events
         patch_ev = DomainEvent(
             case_id=case_id,
             event_type=EventType.PATCH_APPLIED,
@@ -100,22 +142,43 @@ def run_verification(
 
     spec = exp.verification_spec
     if spec is None:
-        fail = DomainEvent(
-            case_id=case_id,
-            event_type=EventType.VERIFICATION_FAILED,
-            timestamp=utc_now(),
-            producer=AgentRole.VERIFIER,
+        fail = _fail_experiment(
+            engine,
+            case_id,
+            experiment_id,
+            reason="MissingVerificationSpec",
             causation_id=causation,
-            payload={
-                "experiment_id": experiment_id,
-                "reason": "MissingVerificationSpec",
-            },
         )
-        engine.append_validated(fail)
         events.append(fail)
         return events
 
-    cwd = repo_root / spec.working_directory if spec.working_directory != "." else repo_root
+    try:
+        cwd = resolve_under_root(
+            root,
+            spec.working_directory if spec.working_directory else ".",
+            what="working_directory",
+        )
+        if not cwd.is_dir():
+            # Allow missing leaf only if it is the repo root; otherwise fail closed.
+            if cwd == root:
+                cwd.mkdir(parents=True, exist_ok=True)
+            else:
+                raise ValidationError(
+                    "working_directory does not exist",
+                    {"path": spec.working_directory},
+                )
+    except ValidationError as exc:
+        fail = _fail_experiment(
+            engine,
+            case_id,
+            experiment_id,
+            reason="PathEscape",
+            causation_id=causation,
+            observation=str(exc),
+        )
+        events.append(fail)
+        return events
+
     cmd = _resolve_command(list(spec.command))
     result = subprocess.run(
         cmd,
@@ -139,28 +202,12 @@ def run_verification(
         "raw_observation_chars": len(raw_observation),
     }
 
-    if not success:
-        fail = DomainEvent(
-            case_id=case_id,
-            event_type=EventType.VERIFICATION_FAILED,
-            timestamp=utc_now(),
-            producer=AgentRole.VERIFIER,
-            causation_id=causation,
-            payload={
-                "experiment_id": experiment_id,
-                "reason": "UnexpectedExitCode",
-                "observation": observation,
-            },
-        )
-        engine.append_validated(fail)
-        events.append(fail)
-        causation = fail.event_id
-
     state = engine.project(case_id)
     assert state is not None
     if state.experiments[experiment_id].status != ExperimentStatus.RUNNING:
         raise RuntimeError(f"Experiment {experiment_id} not RUNNING before evidence")
 
+    # Evidence is always recorded while RUNNING; terminal status follows.
     ev_rec = DomainEvent(
         case_id=case_id,
         event_type=EventType.EVIDENCE_RECORDED,
@@ -179,6 +226,19 @@ def run_verification(
     )
     engine.append_validated(ev_rec)
     events.append(ev_rec)
+
+    if not success:
+        fail = _fail_experiment(
+            engine,
+            case_id,
+            experiment_id,
+            reason="UnexpectedExitCode",
+            causation_id=ev_rec.event_id,
+            observation=observation,
+        )
+        events.append(fail)
+        return events
+
     done = DomainEvent(
         case_id=case_id,
         event_type=EventType.EXPERIMENT_COMPLETED,

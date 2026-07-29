@@ -240,6 +240,37 @@ def scenario_evidence_bloat(service: CaseService, issue_path: Path) -> dict[str,
                         },
                     },
                 ),
+            ]
+        )
+        task = service.next_task(case_id)
+        # After dual hyps + proposed exp with adversary hyp in batch, adversary_challenged
+        # may already be set; Judge should be next to approve.
+        if task["role"] == AgentRole.ADVERSARY.value:
+            service.submit(
+                [
+                    _ev(
+                        case_id,
+                        EventType.EXPERIMENT_PROPOSED,
+                        AgentRole.ADVERSARY,
+                        {
+                            "id": new_id(),
+                            "unknown_id": unknown_id,
+                            "title": "Discriminating noop",
+                            "information_gain": "LOW",
+                            "cost": "LOW",
+                            "affected_hypotheses": [hyp_id],
+                            "verification_spec": {
+                                "command": ["python", "-c", "print(1)"],
+                                "expected_exit_code": 0,
+                            },
+                        },
+                    )
+                ]
+            )
+            task = service.next_task(case_id)
+        assert task["role"] == AgentRole.JUDGE.value
+        service.submit(
+            [
                 _ev(
                     case_id,
                     EventType.EXPERIMENT_APPROVED,
@@ -248,6 +279,7 @@ def scenario_evidence_bloat(service: CaseService, issue_path: Path) -> dict[str,
                 ),
             ]
         )
+        service.next_task(case_id)
         service.verify(case_id, exp_id)
         state = service.engine.project(case_id)
         assert state is not None

@@ -19,14 +19,14 @@ You may propose many hypotheses/experiments in one `submit`, but the Judge sched
 ## Rules
 
 1. Advance the case only through `debugging-engine` CLI or the `debugging-engine` Python API (`Case` / `Engine`).
-2. Follow the Judge `Task` from `debugging-engine next`: respect `role`, `allowed_event_types`, and projection.
-3. Never invent evidence. Run `debugging-engine verify` for Verification Specs.
-4. Hypotheses need experiments; do not promote on persuasion alone.
+2. Follow the Judge `Task` from `debugging-engine next`: respect `role`, `allowed_event_types`, and projection. The kernel **rejects** submits whose event types are outside the current Task.
+3. Never invent evidence. Run `debugging-engine verify` for Verification Specs. Unexpected exit codes mark the experiment **FAILED** (not COMPLETED); interpret the evidence, then propose the next experiment.
+4. Hypotheses need experiments; do not promote on persuasion alone. Optional `parent_id` links child hypotheses; rejecting a parent rejects its descendants.
 5. Max 5 active hypotheses per Unknown (budget). Prefer discriminating experiments when at cap.
 6. Drive through a verified **intervention fix** before `RootCauseAccepted` when a code fix is in scope.
 7. Escalate with `InvestigationEscalated` only for groundbreaking, safety, or human-only blockers — not merely because multiple defects were found.
 8. After every `submit`, call `debugging-engine next` before more work. Never stay on a prior role announcement across handoffs.
-9. Only **Judge** may submit `ExperimentApproved` / accept root cause. Analyst must never self-approve, declare "claims confirmed," run `verify`, or apply intervention patches unless the current Task role is Implementer/Verifier.
+9. Only **Judge** may submit `ExperimentApproved` / accept root cause. Analyst must never self-approve, declare "claims confirmed," run `verify`, or apply intervention patches unless the current Task role is Implementer/Verifier. `PatchApplied` requires Implementer.
 
 ## Loop
 

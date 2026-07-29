@@ -4,9 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from debugging_engine.application.judge import schedule_next_task
 from debugging_engine.application.service import CaseService, utc_now
-from debugging_engine.domain.models import AgentRole, DomainEvent, EventType, HypothesisStatus, new_id
+from debugging_engine.domain.models import AgentRole, DomainEvent, EventType, new_id
 
 
 FIXED_CACHE = '''\
@@ -48,7 +47,6 @@ def run_stub_investigation(service: CaseService, issue_path: Path) -> dict:
     case_id, _ = service.open_issue(issue_path)
     steps: list[str] = []
 
-    # Step: Analyst hypotheses + experiment (observational first — expect fail)
     state = service.engine.project(case_id)
     assert state is not None
     unknown_id = next(iter(state.unknowns))
@@ -57,6 +55,7 @@ def run_stub_investigation(service: CaseService, issue_path: Path) -> dict:
     exp_observe = new_id()
     exp_fix = new_id()
 
+    # Bootstrap Analyst task from open — propose hyp + observational experiment
     service.submit(
         [
             _event(
@@ -97,7 +96,8 @@ def run_stub_investigation(service: CaseService, issue_path: Path) -> dict:
     )
     steps.append("analyst_proposed")
 
-    # Adversary alternative
+    task = service.next_task(case_id)
+    assert task["role"] == AgentRole.ADVERSARY.value
     service.submit(
         [
             _event(
@@ -116,9 +116,8 @@ def run_stub_investigation(service: CaseService, issue_path: Path) -> dict:
     )
     steps.append("adversary_challenged")
 
-    # Judge approves observational experiment
-    task = schedule_next_task(service.engine.project(case_id))  # type: ignore[arg-type]
-    assert task.role == AgentRole.JUDGE
+    task = service.next_task(case_id)
+    assert task["role"] == AgentRole.JUDGE.value
     service.submit(
         [
             _event(
@@ -131,16 +130,21 @@ def run_stub_investigation(service: CaseService, issue_path: Path) -> dict:
     )
     steps.append("approved_observe")
 
-    # Verify observational — expect failure (tests fail, expected_exit_code 0)
+    task = service.next_task(case_id)
+    assert task["role"] == AgentRole.VERIFIER.value
     service.verify(case_id, exp_observe)
     steps.append("verified_observe_failed")
 
-    # Interpretations
     state = service.engine.project(case_id)
     assert state is not None
+    observe_exp = state.experiments[exp_observe]
+    assert observe_exp.status.value == "FAILED"
     evidence_ids = list(state.evidence.keys())
     assert evidence_ids
     ev_id = evidence_ids[-1]
+
+    task = service.next_task(case_id)
+    assert task["role"] == AgentRole.ANALYST.value
     service.submit(
         [
             _event(
@@ -194,7 +198,8 @@ def run_stub_investigation(service: CaseService, issue_path: Path) -> dict:
     )
     steps.append("interpret_and_propose_fix")
 
-    # Approve fix experiment
+    task = service.next_task(case_id)
+    assert task["role"] == AgentRole.JUDGE.value
     service.submit(
         [
             _event(
@@ -205,6 +210,10 @@ def run_stub_investigation(service: CaseService, issue_path: Path) -> dict:
             ),
         ]
     )
+
+    task = service.next_task(case_id)
+    # Implementer if patch not yet applied, else Verifier
+    assert task["role"] in {AgentRole.IMPLEMENTER.value, AgentRole.VERIFIER.value}
     service.verify(case_id, exp_fix)
     steps.append("verified_fix")
 
@@ -216,6 +225,8 @@ def run_stub_investigation(service: CaseService, issue_path: Path) -> dict:
     passed = fix_evidence[-1].attributes.get("passed") is True
 
     if passed:
+        task = service.next_task(case_id)
+        assert task["role"] == AgentRole.ANALYST.value
         service.submit(
             [
                 _event(
@@ -230,17 +241,20 @@ def run_stub_investigation(service: CaseService, issue_path: Path) -> dict:
                         "rationale": "Fixing asymmetric normalization makes tests pass.",
                     },
                 ),
+            ]
+        )
+        task = service.next_task(case_id)
+        assert task["role"] == AgentRole.JUDGE.value
+        service.submit(
+            [
                 _event(
                     case_id,
                     EventType.HYPOTHESIS_REJECTED,
                     AgentRole.JUDGE,
-                    {"hypothesis_id": hyp_logging, "reason": "Discriminating fix experiment falsified logging hypothesis."},
-                ),
-                _event(
-                    case_id,
-                    EventType.HYPOTHESIS_PROMOTED,
-                    AgentRole.JUDGE,
-                    {"hypothesis_id": hyp_cache, "to_status": HypothesisStatus.STRONGLY_SUPPORTED.value},
+                    {
+                        "hypothesis_id": hyp_logging,
+                        "reason": "Discriminating fix experiment falsified logging hypothesis.",
+                    },
                 ),
                 _event(
                     case_id,
@@ -254,7 +268,10 @@ def run_stub_investigation(service: CaseService, issue_path: Path) -> dict:
                     AgentRole.JUDGE,
                     {
                         "hypothesis_id": hyp_cache,
-                        "rationale": "Asymmetric key normalization; verified by failing then passing tests after symmetric normalize_key.",
+                        "rationale": (
+                            "Asymmetric key normalization; verified by failing then "
+                            "passing tests after symmetric normalize_key."
+                        ),
                         "authority": "Judge",
                     },
                 ),
@@ -262,6 +279,7 @@ def run_stub_investigation(service: CaseService, issue_path: Path) -> dict:
         )
         steps.append("root_cause_accepted")
     else:
+        task = service.next_task(case_id)
         service.submit(
             [
                 _event(
@@ -275,4 +293,9 @@ def run_stub_investigation(service: CaseService, issue_path: Path) -> dict:
         steps.append("escalated")
 
     final = service.status(case_id)
-    return {"case_id": case_id, "steps": steps, "status": final["status"], "decision_state": final["decision_state"]}
+    return {
+        "case_id": case_id,
+        "steps": steps,
+        "status": final["status"],
+        "decision_state": final["decision_state"],
+    }

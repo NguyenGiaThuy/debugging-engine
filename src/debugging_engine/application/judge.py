@@ -422,7 +422,11 @@ def schedule_next_task(state: CaseState) -> Task:
             hints=["Submit ExperimentApproved then optionally ExperimentScheduled."],
         )
 
-    completed = [e for e in state.experiments.values() if e.status == ExperimentStatus.COMPLETED]
+    completed = [
+        e
+        for e in state.experiments.values()
+        if e.status in {ExperimentStatus.COMPLETED, ExperimentStatus.FAILED}
+    ]
     interpreted_evidence = {i.evidence_id for i in state.interpretations.values()}
     for exp in completed:
         related = [ev for ev in state.evidence.values() if ev.experiment_id == exp.id]
@@ -432,7 +436,13 @@ def schedule_next_task(state: CaseState) -> Task:
                 case_id=state.case_id,
                 role=AgentRole.ANALYST,
                 objective="Submit interpretations linking new evidence to hypotheses.",
-                allowed_event_types=[EventType.INTERPRETATION_SUBMITTED.value],
+                allowed_event_types=[
+                    EventType.INTERPRETATION_SUBMITTED.value,
+                    EventType.EXPERIMENT_PROPOSED.value,
+                    EventType.HYPOTHESIS_PROPOSED.value,
+                    EventType.HYPOTHESIS_REJECTED.value,
+                    EventType.HYPOTHESIS_SUSPENDED.value,
+                ],
                 projection={
                     "evidence": [
                         {
@@ -521,6 +531,7 @@ def schedule_next_task(state: CaseState) -> Task:
                 EventType.INVESTIGATION_ESCALATED.value,
                 EventType.HYPOTHESIS_REJECTED.value,
                 EventType.HYPOTHESIS_SUSPENDED.value,
+                EventType.HYPOTHESIS_PROMOTED.value,
             ],
             projection={
                 "candidate_hypothesis_id": best.id,
