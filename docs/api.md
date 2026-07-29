@@ -1,14 +1,18 @@
 # Debugging Engine public API
 
-**Status:** Stable for Phase 3 (package `0.4.0`). See [ADR 0005](decisions/0005-public-framework-api.md).
+**Status:** Stable for Phase 3+ (package `0.7.0`). See [ADR 0005](decisions/0005-public-framework-api.md).
 
 Debugging Engine is an **agent-agnostic investigation kernel**. This API does **not** run Analyst/Adversary/Implementer LLMs. Coding agents call these methods (or the CLI) to advance Case State.
 
 ## Install
 
 ```bash
-pip install -e ".[dev]"
+uv tool install debugging-engine --from git+https://github.com/NguyenGiaThuy/debugging-engine
+# or for local development:
+uv pip install -e ".[dev]"
 ```
+
+Scaffold skills into a project: `debugging-engine --agent cursor` (see [ADR 0007](decisions/0007-agent-scaffolding.md)).
 
 ## Quick start
 

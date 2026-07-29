@@ -12,3 +12,4 @@ Each ADR records: Context, Decision, Rationale, Consequences, Alternatives consi
 | [0004](0004-judge-no-content-heuristics.md) | Judge must not use content heuristics |
 | [0005](0005-public-framework-api.md) | Public framework API (Engine + Case) |
 | [0006](0006-skills-as-interfaces.md) | Skills are interfaces to the Debugging Engine kernel |
+| [0007](0007-agent-scaffolding.md) | Agent scaffolding via `--agent` |
