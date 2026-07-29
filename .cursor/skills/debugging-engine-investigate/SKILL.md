@@ -28,6 +28,7 @@ You may propose many hypotheses/experiments in one `submit`, but the Judge sched
 8. After every `submit`, call `debugging-engine next` before more work. Never stay on a prior role announcement across handoffs.
 9. Only **Judge** may submit `ExperimentApproved` / accept root cause (`authority: Judge` required). Analyst must never self-approve, declare "claims confirmed," run `verify`, or apply intervention patches unless the current Task role is Implementer/Verifier. `PatchApplied` requires Implementer.
 10. After new **SUPPORTS** evidence, expect an **Adversary** rebuttal handoff before the next approve/accept — do not skip it.
+11. Event `producer` must match the current Task `role` (no forging `producer: Adversary` while acting as Analyst).
 
 ## Loop
 

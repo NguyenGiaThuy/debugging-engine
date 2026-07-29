@@ -87,6 +87,43 @@ def test_verify_path_escape_fails_experiment(tmp_path: Path):
     assert not (tmp_path / "escape.txt").exists()
 
 
+def _approve_after_adversary(svc: CaseService, case_id: str, eid: str) -> None:
+    task = svc.next_task(case_id)
+    assert task["role"] == AgentRole.ADVERSARY.value
+    st = svc.engine.project(case_id)
+    assert st is not None
+    unk = next(iter(st.unknowns))
+    svc.submit(
+        [
+            DomainEvent(
+                case_id=case_id,
+                event_type=EventType.HYPOTHESIS_PROPOSED,
+                timestamp=utc_now(),
+                producer=AgentRole.ADVERSARY,
+                payload={
+                    "id": new_id(),
+                    "unknown_id": unk,
+                    "title": "alt",
+                    "explanation": "e",
+                },
+            )
+        ]
+    )
+    task = svc.next_task(case_id)
+    assert task["role"] == AgentRole.JUDGE.value
+    svc.submit(
+        [
+            DomainEvent(
+                case_id=case_id,
+                event_type=EventType.EXPERIMENT_APPROVED,
+                timestamp=utc_now(),
+                producer=AgentRole.JUDGE,
+                payload={"experiment_id": eid, "authority": "Judge"},
+            )
+        ]
+    )
+
+
 def test_verify_cwd_escape_fails_experiment(tmp_path: Path):
     svc, case_id = _open(tmp_path)
     st = svc.engine.project(case_id)
@@ -127,32 +164,9 @@ def test_verify_cwd_escape_fails_experiment(tmp_path: Path):
                     },
                 },
             ),
-            DomainEvent(
-                case_id=case_id,
-                event_type=EventType.HYPOTHESIS_PROPOSED,
-                timestamp=utc_now(),
-                producer=AgentRole.ADVERSARY,
-                payload={
-                    "id": new_id(),
-                    "unknown_id": unk,
-                    "title": "alt",
-                    "explanation": "e",
-                },
-            ),
         ]
     )
-    svc.next_task(case_id)
-    svc.submit(
-        [
-            DomainEvent(
-                case_id=case_id,
-                event_type=EventType.EXPERIMENT_APPROVED,
-                timestamp=utc_now(),
-                producer=AgentRole.JUDGE,
-                payload={"experiment_id": eid, "authority": "Judge"},
-            )
-        ]
-    )
+    _approve_after_adversary(svc, case_id, eid)
     emitted = run_verification(svc.engine, case_id, eid, svc.repo_root)
     assert any(e.event_type == EventType.VERIFICATION_FAILED for e in emitted)
     st = svc.engine.project(case_id)
@@ -200,32 +214,9 @@ def test_verify_unexpected_exit_marks_failed_not_completed(tmp_path: Path):
                     },
                 },
             ),
-            DomainEvent(
-                case_id=case_id,
-                event_type=EventType.HYPOTHESIS_PROPOSED,
-                timestamp=utc_now(),
-                producer=AgentRole.ADVERSARY,
-                payload={
-                    "id": new_id(),
-                    "unknown_id": unk,
-                    "title": "alt",
-                    "explanation": "e",
-                },
-            ),
         ]
     )
-    svc.next_task(case_id)
-    svc.submit(
-        [
-            DomainEvent(
-                case_id=case_id,
-                event_type=EventType.EXPERIMENT_APPROVED,
-                timestamp=utc_now(),
-                producer=AgentRole.JUDGE,
-                payload={"experiment_id": eid, "authority": "Judge"},
-            )
-        ]
-    )
+    _approve_after_adversary(svc, case_id, eid)
     emitted = run_verification(svc.engine, case_id, eid, svc.repo_root)
     types = [e.event_type for e in emitted]
     assert EventType.EVIDENCE_RECORDED in types
@@ -340,12 +331,13 @@ def test_analyst_patch_applied_rejected(tmp_path: Path):
             ),
         ]
     )
+    # Domain gate: even if Task role matches producer, PatchApplied rejects Analyst.
     svc._write_meta(
         case_id,
         {
             **svc._read_meta(case_id),
             "last_task": {
-                "role": AgentRole.IMPLEMENTER.value,
+                "role": AgentRole.ANALYST.value,
                 "allowed_event_types": [EventType.PATCH_APPLIED.value],
                 "done": False,
                 "objective": "test",

@@ -227,21 +227,6 @@ def run_session_ttl_investigate(service: CaseService, issue_path: Path) -> dict:
             ),
             _event(
                 case_id,
-                EventType.INTERPRETATION_SUBMITTED,
-                AgentRole.ADVERSARY,
-                {
-                    "id": new_id(),
-                    "evidence_id": ev_id,
-                    "hypothesis_id": hyp_clock,
-                    "outcome": "WEAKENS",
-                    "rationale": (
-                        "Objection category: Missing Evidence — failing tests use explicit "
-                        "monotonic now= sequences; no evidence of inconsistent clocks."
-                    ),
-                },
-            ),
-            _event(
-                case_id,
                 EventType.EXPERIMENT_PROPOSED,
                 AgentRole.ANALYST,
                 {
@@ -260,6 +245,28 @@ def run_session_ttl_investigate(service: CaseService, issue_path: Path) -> dict:
                         "working_directory": ".",
                     },
                     "patch": {"session.py": FIXED_SESSION},
+                },
+            ),
+        ]
+    )
+
+    task = announce(service.next_task(case_id))
+    assert task["role"] == AgentRole.ADVERSARY.value
+    service.submit(
+        [
+            _event(
+                case_id,
+                EventType.INTERPRETATION_SUBMITTED,
+                AgentRole.ADVERSARY,
+                {
+                    "id": new_id(),
+                    "evidence_id": ev_id,
+                    "hypothesis_id": hyp_clock,
+                    "outcome": "WEAKENS",
+                    "rationale": (
+                        "Objection category: Missing Evidence — failing tests use explicit "
+                        "monotonic now= sequences; no evidence of inconsistent clocks."
+                    ),
                 },
             ),
         ]

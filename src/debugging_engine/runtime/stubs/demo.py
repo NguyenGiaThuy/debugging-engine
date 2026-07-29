@@ -161,18 +161,6 @@ def run_stub_investigation(service: CaseService, issue_path: Path) -> dict:
             ),
             _event(
                 case_id,
-                EventType.INTERPRETATION_SUBMITTED,
-                AgentRole.ADVERSARY,
-                {
-                    "id": new_id(),
-                    "evidence_id": ev_id,
-                    "hypothesis_id": hyp_logging,
-                    "outcome": "INCONCLUSIVE",
-                    "rationale": "Test failure does not mention logging; need discriminating fix experiment.",
-                },
-            ),
-            _event(
-                case_id,
                 EventType.EXPERIMENT_PROPOSED,
                 AgentRole.ANALYST,
                 {
@@ -197,6 +185,25 @@ def run_stub_investigation(service: CaseService, issue_path: Path) -> dict:
         ]
     )
     steps.append("interpret_and_propose_fix")
+
+    task = service.next_task(case_id)
+    assert task["role"] == AgentRole.ADVERSARY.value
+    service.submit(
+        [
+            _event(
+                case_id,
+                EventType.INTERPRETATION_SUBMITTED,
+                AgentRole.ADVERSARY,
+                {
+                    "id": new_id(),
+                    "evidence_id": ev_id,
+                    "hypothesis_id": hyp_logging,
+                    "outcome": "INCONCLUSIVE",
+                    "rationale": "Test failure does not mention logging; need discriminating fix experiment.",
+                },
+            ),
+        ]
+    )
 
     task = service.next_task(case_id)
     assert task["role"] == AgentRole.JUDGE.value

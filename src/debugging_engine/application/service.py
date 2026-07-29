@@ -94,7 +94,7 @@ class CaseService:
         self._write_meta(case_id, meta)
 
     def _enforce_task_allowed(self, case_id: str, events: list[DomainEvent]) -> None:
-        """Reject submits whose event types are outside the last Judge Task."""
+        """Reject submits whose event types/producers are outside the last Judge Task."""
         meta = self._read_meta(case_id)
         last = meta.get("last_task")
         if not last:
@@ -113,6 +113,7 @@ class CaseService:
                 "Current Task allows no events; call next or escalate",
                 {"role": last.get("role")},
             )
+        role = last.get("role")
         for event in events:
             if event.producer == AgentRole.SYSTEM:
                 continue
@@ -121,8 +122,22 @@ class CaseService:
                     "Event type not allowed by current Judge Task",
                     {
                         "event_type": event.event_type.value,
-                        "role": last.get("role"),
+                        "role": role,
                         "allowed_event_types": sorted(allowed),
+                    },
+                )
+            # Prevent role forgery (e.g. Analyst submitting producer=Adversary
+            # interpretations to skip the Adversary handoff).
+            producer = (
+                event.producer.value if hasattr(event.producer, "value") else str(event.producer)
+            )
+            if producer != role:
+                raise ValidationError(
+                    "Event producer must match current Judge Task role",
+                    {
+                        "producer": producer,
+                        "role": role,
+                        "event_type": event.event_type.value,
                     },
                 )
 

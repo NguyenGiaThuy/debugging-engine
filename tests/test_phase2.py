@@ -110,6 +110,8 @@ def test_stall_escalation_task(tmp_path: Path):
     svc = CaseService(workspace, store_root=tmp_path / "cases")
     case_id, _ = svc.open_issue(issue)
     unk = next(iter(svc.engine.project(case_id).unknowns))  # type: ignore[union-attr]
+    # Two Analyst hypotheses (no forged Adversary producer) — skips pre-evidence
+    # Adversary gate when competing >= 2 and no proposed experiments.
     svc.submit(
         [
             DomainEvent(
@@ -128,7 +130,7 @@ def test_stall_escalation_task(tmp_path: Path):
                 case_id=case_id,
                 event_type=EventType.HYPOTHESIS_PROPOSED,
                 timestamp="2026-07-29T00:00:00Z",
-                producer=AgentRole.ADVERSARY,
+                producer=AgentRole.ANALYST,
                 payload={
                     "id": new_id(),
                     "unknown_id": unk,

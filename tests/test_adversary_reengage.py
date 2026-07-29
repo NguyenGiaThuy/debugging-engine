@@ -21,21 +21,6 @@ def _open(tmp_path: Path) -> tuple[CaseService, str]:
     return svc, case_id
 
 
-def _force_task(svc: CaseService, case_id: str, role: AgentRole, allowed: list[str]) -> None:
-    svc._write_meta(
-        case_id,
-        {
-            **svc._read_meta(case_id),
-            "last_task": {
-                "role": role.value,
-                "allowed_event_types": allowed,
-                "done": False,
-                "objective": "test",
-            },
-        },
-    )
-
-
 def test_experiment_proposed_rejects_escaping_patch_path(tmp_path: Path):
     svc, case_id = _open(tmp_path)
     st = svc.engine.project(case_id)
@@ -79,6 +64,30 @@ def test_experiment_proposed_rejects_escaping_patch_path(tmp_path: Path):
         )
 
 
+def test_analyst_cannot_forge_adversary_producer(tmp_path: Path):
+    svc, case_id = _open(tmp_path)
+    st = svc.engine.project(case_id)
+    assert st is not None
+    unk = next(iter(st.unknowns))
+    with pytest.raises(ValidationError, match="producer must match"):
+        svc.submit(
+            [
+                DomainEvent(
+                    case_id=case_id,
+                    event_type=EventType.HYPOTHESIS_PROPOSED,
+                    timestamp=utc_now(),
+                    producer=AgentRole.ADVERSARY,
+                    payload={
+                        "id": new_id(),
+                        "unknown_id": unk,
+                        "title": "forged",
+                        "explanation": "e",
+                    },
+                )
+            ]
+        )
+
+
 def test_adversary_reengages_after_unrebutted_supports(tmp_path: Path):
     svc, case_id = _open(tmp_path)
     st = svc.engine.project(case_id)
@@ -117,6 +126,12 @@ def test_adversary_reengages_after_unrebutted_supports(tmp_path: Path):
                     },
                 },
             ),
+        ]
+    )
+    task = svc.next_task(case_id)
+    assert task["role"] == AgentRole.ADVERSARY.value
+    svc.submit(
+        [
             DomainEvent(
                 case_id=case_id,
                 event_type=EventType.HYPOTHESIS_PROPOSED,
@@ -128,10 +143,11 @@ def test_adversary_reengages_after_unrebutted_supports(tmp_path: Path):
                     "title": "alt",
                     "explanation": "e",
                 },
-            ),
+            )
         ]
     )
-    svc.next_task(case_id)
+    task = svc.next_task(case_id)
+    assert task["role"] == AgentRole.JUDGE.value
     svc.submit(
         [
             DomainEvent(
