@@ -6,7 +6,7 @@ from debugging_engine.domain.models import AgentRole, DomainEvent, EventType
 from debugging_engine.domain.validation import ValidationError
 from debugging_engine.policies import DefaultSchedulingPolicy, SchedulingPolicy
 
-__version__ = "1.0.1"
+__version__ = "1.0.2"
 
 __all__ = [
     "Case",
