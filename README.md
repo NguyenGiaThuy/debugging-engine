@@ -13,9 +13,15 @@ The complete SMADW v3.1 RFC lives in [`docs/rfc/`](docs/rfc/).
 | I–VI | **Normative** |
 | VII | **Informative** |
 
-## Current milestone — Phase 3
+## Current milestone — Phase 4
 
-Stable framework API (`Engine`, `Case`, `SchedulingPolicy`). See [`docs/api.md`](docs/api.md) and [`docs/roadmap.md`](docs/roadmap.md).
+Cursor **skills** are the interface; SMADW remains the engine. Project skills:
+
+- `smadw-investigate` — general debugging investigation
+- `smadw-incident` — production incidents
+- `smadw-performance` — latency / throughput / memory
+
+See [`.cursor/skills/`](.cursor/skills/) and [`docs/roadmap.md`](docs/roadmap.md).
 
 ### Library
 
@@ -57,8 +63,9 @@ smadw verify <case-id> <experiment-id>
 | --- | --- |
 | `docs/rfc/` | SMADW specification |
 | `docs/api.md` | Public framework API |
-| `docs/roadmap.md` | Phases 1–4 (skill last) |
+| `docs/roadmap.md` | Phases 1–4 |
 | `docs/decisions/` | ADRs |
+| `.cursor/skills/` | Cursor skills (interfaces to the kernel) |
 | `src/smadw/` | Investigation kernel + public API |
 | `subject/` | System under investigation (seeded bugs) |
 | `.smadw/cases/` | Local Event Logs (gitignored) |

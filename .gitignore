@@ -49,8 +49,10 @@ tmp/
 temp/
 .cache/
 
-# Local tooling
-.cursor/
+# Local tooling (keep project skills tracked)
+.cursor/*
+!.cursor/skills/
+!.cursor/skills/**
 
 # SMADW local case data
 .smadw/
