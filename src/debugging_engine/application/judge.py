@@ -268,38 +268,8 @@ def schedule_next_task(state: CaseState) -> Task:
             ],
         )
 
-    competing = [
-        h
-        for h in state.hypotheses.values()
-        if h.status not in {HypothesisStatus.REJECTED, HypothesisStatus.SUSPENDED}
-    ]
-    if len(competing) < 2 and not state.evidence:
-        # Respect budget — if already at cap with one hyp, ask for experiment not more hyps
-        unk_id = next(iter(state.unknowns))
-        if budget_remaining(state, unk_id) == 0:
-            return Task(
-                case_id=state.case_id,
-                role=AgentRole.ANALYST,
-                objective="Hypothesis budget exhausted. Propose a discriminating experiment instead.",
-                allowed_event_types=[EventType.EXPERIMENT_PROPOSED.value],
-                projection=_slice_for_role(state, AgentRole.ANALYST),
-            )
-        return Task(
-            case_id=state.case_id,
-            role=AgentRole.ADVERSARY,
-            objective="Challenge the current explanation; propose an alternative hypothesis and/or discriminating experiment.",
-            allowed_event_types=[
-                EventType.HYPOTHESIS_PROPOSED.value,
-                EventType.EXPERIMENT_PROPOSED.value,
-            ],
-            projection={
-                **_slice_for_role(state, AgentRole.ADVERSARY),
-                "budget_remaining": budget_remaining(state, unk_id),
-            },
-            hints=["Objections must use a defined category.", "Prefer experiments that discriminate."],
-        )
-
-    # Approve / schedule best proposed experiment
+    # Approve / run experiments before seeking more hypotheses so Verifier/Implementer
+    # are not starved when only one competing hypothesis exists.
     proposed = [e for e in state.experiments.values() if e.status == ExperimentStatus.PROPOSED]
     if proposed:
         proposed.sort(key=lambda e: (-GAIN_RANK[e.information_gain], COST_RANK[e.cost]))
@@ -342,6 +312,39 @@ def schedule_next_task(state: CaseState) -> Task:
     if runnable:
         runnable.sort(key=lambda e: (-GAIN_RANK[e.information_gain], COST_RANK[e.cost]))
         exp = runnable[0]
+        applied_ids = {
+            p.get("experiment_id")
+            for p in state.decision_state.get("patches", [])
+            if isinstance(p, dict)
+        }
+        if exp.patch and exp.id not in applied_ids:
+            return Task(
+                case_id=state.case_id,
+                role=AgentRole.IMPLEMENTER,
+                objective=(
+                    f"Materialize the approved patch for experiment '{exp.title}' ({exp.id}), "
+                    "then submit PatchApplied."
+                ),
+                allowed_event_types=[
+                    EventType.PATCH_APPLIED.value,
+                    EventType.IMPLEMENTATION_FAILED.value,
+                ],
+                projection={
+                    "experiment_id": exp.id,
+                    "experiment": {
+                        "id": exp.id,
+                        "title": _short(exp.title),
+                        "status": exp.status.value,
+                        "has_patch": True,
+                        "patch_paths": list(exp.patch.keys()),
+                    },
+                    "metrics": _metrics_summary(state),
+                },
+                hints=[
+                    "Write patch files under the repo root exactly as specified.",
+                    "After PatchApplied, the next task should be Verifier.",
+                ],
+            )
         return Task(
             case_id=state.case_id,
             role=AgentRole.VERIFIER,
@@ -363,7 +366,41 @@ def schedule_next_task(state: CaseState) -> Task:
                 },
                 "metrics": _metrics_summary(state),
             },
-            hints=["Prefer `debugging-engine verify <case-id> <experiment-id>` rather than hand-writing evidence."],
+            hints=[
+                "Announce this Verifier handoff in chat before running verify.",
+                "Prefer `debugging-engine verify <case-id> <experiment-id>` rather than hand-writing evidence.",
+            ],
+        )
+
+    competing = [
+        h
+        for h in state.hypotheses.values()
+        if h.status not in {HypothesisStatus.REJECTED, HypothesisStatus.SUSPENDED}
+    ]
+    if len(competing) < 2 and not state.evidence:
+        # Respect budget — if already at cap with one hyp, ask for experiment not more hyps
+        unk_id = next(iter(state.unknowns))
+        if budget_remaining(state, unk_id) == 0:
+            return Task(
+                case_id=state.case_id,
+                role=AgentRole.ANALYST,
+                objective="Hypothesis budget exhausted. Propose a discriminating experiment instead.",
+                allowed_event_types=[EventType.EXPERIMENT_PROPOSED.value],
+                projection=_slice_for_role(state, AgentRole.ANALYST),
+            )
+        return Task(
+            case_id=state.case_id,
+            role=AgentRole.ADVERSARY,
+            objective="Challenge the current explanation; propose an alternative hypothesis and/or discriminating experiment.",
+            allowed_event_types=[
+                EventType.HYPOTHESIS_PROPOSED.value,
+                EventType.EXPERIMENT_PROPOSED.value,
+            ],
+            projection={
+                **_slice_for_role(state, AgentRole.ADVERSARY),
+                "budget_remaining": budget_remaining(state, unk_id),
+            },
+            hints=["Objections must use a defined category.", "Prefer experiments that discriminate."],
         )
 
     completed = [e for e in state.experiments.values() if e.status == ExperimentStatus.COMPLETED]
@@ -393,16 +430,18 @@ def schedule_next_task(state: CaseState) -> Task:
             )
 
     if state.evidence and len(state.interpretations) == 1:
-        return Task(
-            case_id=state.case_id,
-            role=AgentRole.ADVERSARY,
-            objective="Submit a competing interpretation of the latest evidence, or concede sufficiency.",
-            allowed_event_types=[
-                EventType.INTERPRETATION_SUBMITTED.value,
-                EventType.EXPERIMENT_PROPOSED.value,
-            ],
-            projection=_slice_for_role(state, AgentRole.ADVERSARY),
-        )
+        only = next(iter(state.interpretations.values()))
+        if only.outcome.value != "SUPPORTS":
+            return Task(
+                case_id=state.case_id,
+                role=AgentRole.ADVERSARY,
+                objective="Submit a competing interpretation of the latest evidence, or concede sufficiency.",
+                allowed_event_types=[
+                    EventType.INTERPRETATION_SUBMITTED.value,
+                    EventType.EXPERIMENT_PROPOSED.value,
+                ],
+                projection=_slice_for_role(state, AgentRole.ADVERSARY),
+            )
 
     supported = [
         h
@@ -420,10 +459,42 @@ def schedule_next_task(state: CaseState) -> Task:
     ]
     if supported and state.evidence:
         best = supported[0]
+        successful_fix = any(
+            e.experiment_class == "intervention"
+            and e.status == ExperimentStatus.COMPLETED
+            and any(
+                ev.experiment_id == e.id and ev.attributes.get("passed") is True
+                for ev in state.evidence.values()
+            )
+            for e in state.experiments.values()
+        )
+        if not successful_fix:
+            return Task(
+                case_id=state.case_id,
+                role=AgentRole.ANALYST,
+                objective=(
+                    "Evidence supports a root-cause hypothesis. Propose an intervention experiment "
+                    "that implements and verifies the fix before accepting root cause."
+                ),
+                allowed_event_types=[
+                    EventType.EXPERIMENT_PROPOSED.value,
+                    EventType.INVESTIGATION_ESCALATED.value,
+                ],
+                projection={
+                    "candidate_hypothesis_id": best.id,
+                    "hypotheses": _hyp_summary(state),
+                    "interpretations": _interp_summary(state),
+                    "metrics": _metrics_summary(state),
+                },
+                hints=[
+                    "Prefer experiment_class=intervention with a patch when possible.",
+                    "Escalate only for groundbreaking, safety, or human-only blockers.",
+                ],
+            )
         return Task(
             case_id=state.case_id,
             role=AgentRole.JUDGE,
-            objective="Evidence may be sufficient. Accept root cause or request another discriminating experiment.",
+            objective="Fix verified. Accept root cause or escalate if residual risk remains.",
             allowed_event_types=[
                 EventType.ROOT_CAUSE_ACCEPTED.value,
                 EventType.UNKNOWN_RESOLVED.value,
@@ -450,7 +521,10 @@ def schedule_next_task(state: CaseState) -> Task:
             EventType.INVESTIGATION_ESCALATED.value,
         ],
         projection=_slice_for_role(state, AgentRole.ANALYST),
-        hints=["Starvation policy: waiting indefinitely is prohibited."],
+        hints=[
+            "Starvation policy: waiting indefinitely is prohibited.",
+            "Escalate only for groundbreaking, safety, or human-only blockers.",
+        ],
     )
 
 

@@ -77,7 +77,11 @@ def run_verification(
     state = engine.project(case_id)
     assert state is not None
     exp = state.experiments[experiment_id]
-    if exp.patch:
+    already_patched = any(
+        isinstance(p, dict) and p.get("experiment_id") == experiment_id
+        for p in state.decision_state.get("patches", [])
+    )
+    if exp.patch and not already_patched:
         for rel_path, content in exp.patch.items():
             target = repo_root / rel_path
             target.parent.mkdir(parents=True, exist_ok=True)

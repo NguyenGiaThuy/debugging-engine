@@ -240,7 +240,7 @@ def run_stub_investigation(service: CaseService, issue_path: Path) -> dict:
                     case_id,
                     EventType.HYPOTHESIS_PROMOTED,
                     AgentRole.JUDGE,
-                    {"hypothesis_id": hyp_cache, "to_status": HypothesisStatus.PLAUSIBLE.value},
+                    {"hypothesis_id": hyp_cache, "to_status": HypothesisStatus.STRONGLY_SUPPORTED.value},
                 ),
                 _event(
                     case_id,

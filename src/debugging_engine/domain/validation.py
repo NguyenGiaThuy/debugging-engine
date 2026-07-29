@@ -340,6 +340,35 @@ def apply_event(state: CaseState | None, event: DomainEvent) -> CaseState:
             producer=event.producer,
         )
         s.interpretations[interp.id] = interp
+        hyp = s.hypotheses[interp.hypothesis_id]
+        if (
+            interp.outcome == InterpretationOutcome.SUPPORTS
+            and hyp.status == HypothesisStatus.PROPOSED
+        ):
+            # Advance one positive rung so Judge can see supported candidates without
+            # requiring a separate HypothesisPromoted event.
+            hyp.status = HypothesisStatus.PLAUSIBLE
+        elif (
+            interp.outcome == InterpretationOutcome.SUPPORTS
+            and hyp.status == HypothesisStatus.PLAUSIBLE
+        ):
+            hyp.status = HypothesisStatus.SUPPORTED
+        elif (
+            interp.outcome == InterpretationOutcome.SUPPORTS
+            and hyp.status == HypothesisStatus.SUPPORTED
+        ):
+            hyp.status = HypothesisStatus.STRONGLY_SUPPORTED
+        elif (
+            interp.outcome == InterpretationOutcome.WEAKENS
+            and hyp.status
+            in {
+                HypothesisStatus.PROPOSED,
+                HypothesisStatus.PLAUSIBLE,
+                HypothesisStatus.SUPPORTED,
+                HypothesisStatus.STRONGLY_SUPPORTED,
+            }
+        ):
+            hyp.status = HypothesisStatus.WEAKENED
     elif et == EventType.ROOT_CAUSE_ACCEPTED:
         s.decision_state["root_cause_hypothesis_id"] = payload["hypothesis_id"]
         s.decision_state["root_cause_rationale"] = payload["rationale"]
