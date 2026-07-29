@@ -261,7 +261,7 @@ def validate(
     ),
     report: Optional[Path] = typer.Option(
         None,
-        help="Write markdown report (default: docs/validation/phase2-report.md under cwd)",
+        help="Write markdown report (default: phase2-report.md under cwd)",
     ),
 ) -> None:
     """Run Phase 2 architectural validation scenarios and emit metrics."""
@@ -270,7 +270,7 @@ def validate(
     from debugging_engine.runtime.stubs.fixture import cache_miss_issue, materialize_cache_miss
 
     cwd = Path.cwd()
-    report_path = report if report else cwd / "docs" / "validation" / "phase2-report.md"
+    report_path = report if report else cwd / "phase2-report.md"
     if report_path and not report_path.is_absolute():
         report_path = cwd / report_path
 

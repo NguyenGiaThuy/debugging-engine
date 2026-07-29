@@ -25,7 +25,7 @@ Every submitted event needs:
   "event_type": "HypothesisProposed",
   "timestamp": "2026-07-29T12:00:00Z",
   "producer": "Analyst",
-  "schema_version": "3.1.0",
+  "schema_version": "1.0.0",
   "payload": {}
 }
 ```

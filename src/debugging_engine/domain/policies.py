@@ -1,4 +1,4 @@
-"""Phase 2 architectural constants (see docs/decisions/)."""
+"""Phase 2 architectural constants."""
 
 from __future__ import annotations
 

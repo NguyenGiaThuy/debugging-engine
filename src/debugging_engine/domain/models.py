@@ -7,7 +7,7 @@ from uuid import uuid4
 from pydantic import BaseModel, Field
 
 
-SCHEMA_VERSION = "3.1.0"
+SCHEMA_VERSION = "1.0.0"
 
 
 def new_id() -> str:

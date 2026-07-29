@@ -98,22 +98,19 @@ Full surface: [`docs/api.md`](docs/api.md).
 
 ## Specification
 
-Debugging Engine **v3.1** RFC: [`docs/rfc/`](docs/rfc/).
+Debugging Engine **v1.0.0** specification: [`docs/SPECIFICATION.md`](docs/SPECIFICATION.md).
 
 | Parts | Status |
 | --- | --- |
 | I–VI | Normative |
 | VII | Informative |
 
-Roadmap and ADRs: [`docs/roadmap.md`](docs/roadmap.md), [`docs/decisions/`](docs/decisions/).
-
 ## Repository layout
 
 | Path | Role |
 | --- | --- |
-| `docs/rfc/` | Specification |
+| `docs/SPECIFICATION.md` | Official Debugging Engine v1.0.0 specification |
 | `docs/api.md` | Public framework API |
-| `docs/decisions/` | ADRs |
 | `src/debugging_engine/` | Kernel, CLI, skill templates, offline fixtures |
 | `.cursor/skills/` | Cursor skills (synced from package templates) |
 | `.debugging-engine/cases/` | Local Event Logs (gitignored) |
