@@ -1,0 +1,56 @@
+# OS / editor
+.DS_Store
+Thumbs.db
+*.swp
+*~
+.idea/
+.vscode/
+*.code-workspace
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+*.pem
+credentials.json
+secrets/
+
+# Node / JS
+node_modules/
+dist/
+build/
+coverage/
+.npm/
+*.tsbuildinfo
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+
+# .NET
+bin/
+obj/
+*.user
+*.suo
+.vs/
+
+# Rust
+target/
+
+# Logs / temp
+*.log
+tmp/
+temp/
+.cache/
+
+# Local tooling
+.cursor/
+
+# SMADW local case data
+.smadw/
