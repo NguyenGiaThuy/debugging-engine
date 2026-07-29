@@ -143,6 +143,16 @@ def validate_event(state: CaseState | None, event: DomainEvent) -> None:
             raise ValidationError("target Unknown does not exist")
         if payload["id"] in state.experiments:
             raise ValidationError("Experiment already exists")
+        patch = payload.get("patch")
+        if patch is not None:
+            if not isinstance(patch, dict):
+                raise ValidationError("ExperimentProposed patch must be a mapping of path -> content")
+            for rel in patch:
+                if not isinstance(rel, str) or not rel or Path(rel).is_absolute() or ".." in Path(rel).parts:
+                    raise ValidationError(
+                        "ExperimentProposed patch paths must be relative and contained",
+                        {"path": rel},
+                    )
         return
 
     if et == EventType.EXPERIMENT_APPROVED:
@@ -226,6 +236,11 @@ def validate_event(state: CaseState | None, event: DomainEvent) -> None:
                 "RootCauseAccepted requires producer Judge",
                 {"producer": event.producer},
             )
+        if payload.get("authority") != AgentRole.JUDGE:
+            raise ValidationError(
+                "RootCauseAccepted requires authority Judge",
+                {"authority": payload.get("authority")},
+            )
         hid = payload.get("hypothesis_id")
         if not hid:
             raise ValidationError("RootCauseAccepted requires hypothesis_id")
@@ -251,11 +266,41 @@ def validate_event(state: CaseState | None, event: DomainEvent) -> None:
                 {"hypothesis_id": hid},
             )
 
-        # Code-fix path: require a successful intervention experiment.
-        has_intervention = any(e.experiment_class == "intervention" for e in state.experiments.values())
-        if has_intervention:
+        # All terminal-experiment evidence must be interpreted before acceptance.
+        interpreted = {i.evidence_id for i in state.interpretations.values()}
+        terminal = {
+            ExperimentStatus.COMPLETED,
+            ExperimentStatus.FAILED,
+        }
+        for ev in state.evidence.values():
+            exp = state.experiments.get(ev.experiment_id)
+            if exp is not None and exp.status in terminal and ev.id not in interpreted:
+                raise ValidationError(
+                    "RootCauseAccepted requires all terminal evidence to be interpreted",
+                    {"evidence_id": ev.id, "experiment_id": ev.experiment_id},
+                )
+
+        # At least one successful verification result must exist.
+        has_passed = any(
+            ev.attributes.get("passed") is True
+            and state.experiments.get(ev.experiment_id) is not None
+            and state.experiments[ev.experiment_id].status == ExperimentStatus.COMPLETED
+            for ev in state.evidence.values()
+        )
+        if not has_passed:
+            raise ValidationError(
+                "RootCauseAccepted requires a successful verification (passed evidence)",
+                {"hypothesis_id": hid},
+            )
+
+        # Code-fix / patched path: require a successful intervention experiment.
+        needs_intervention = any(
+            e.experiment_class == "intervention" or bool(e.patch)
+            for e in state.experiments.values()
+        )
+        if needs_intervention:
             passed_intervention = any(
-                e.experiment_class == "intervention"
+                (e.experiment_class == "intervention" or bool(e.patch))
                 and e.status == ExperimentStatus.COMPLETED
                 and any(
                     ev.experiment_id == e.id and ev.attributes.get("passed") is True

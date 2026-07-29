@@ -326,6 +326,25 @@ def run_session_ttl_investigate(service: CaseService, issue_path: Path) -> dict:
     )
 
     task = announce(service.next_task(case_id))
+    assert task["role"] == AgentRole.ADVERSARY.value
+    service.submit(
+        [
+            _event(
+                case_id,
+                EventType.INTERPRETATION_SUBMITTED,
+                AgentRole.ADVERSARY,
+                {
+                    "id": new_id(),
+                    "evidence_id": fix_ev,
+                    "hypothesis_id": hyp_clock,
+                    "outcome": "WEAKENS",
+                    "rationale": "Passing last_seen fix falsifies inconsistent-now alternative.",
+                },
+            ),
+        ]
+    )
+
+    task = announce(service.next_task(case_id))
     assert task["role"] == AgentRole.JUDGE.value
     service.submit(
         [

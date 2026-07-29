@@ -313,6 +313,41 @@ def test_supports_promotes_proposed_hypothesis(tmp_path: Path):
     st = svc.engine.project(case_id)
     assert st is not None
     assert st.hypotheses[hid].status == HypothesisStatus.PLAUSIBLE
+    # Unrebutted SUPPORTS => Adversary re-engage before intervention / accept.
+    task = schedule_next_task(st)
+    assert task.role == AgentRole.ADVERSARY
+    assert "unrebutted_evidence_ids" in task.projection
+    svc._write_meta(
+        case_id,
+        {
+            **svc._read_meta(case_id),
+            "last_task": {
+                "role": AgentRole.ADVERSARY.value,
+                "allowed_event_types": list(task.allowed_event_types),
+                "done": False,
+                "objective": task.objective,
+            },
+        },
+    )
+    svc.submit(
+        [
+            DomainEvent(
+                case_id=case_id,
+                event_type=EventType.INTERPRETATION_SUBMITTED,
+                timestamp=utc_now(),
+                producer=AgentRole.ADVERSARY,
+                payload={
+                    "id": new_id(),
+                    "evidence_id": evid,
+                    "hypothesis_id": hid,
+                    "outcome": "INCONCLUSIVE",
+                    "rationale": "Need discriminating intervention before acceptance.",
+                },
+            )
+        ]
+    )
+    st = svc.engine.project(case_id)
+    assert st is not None
     task = schedule_next_task(st)
     assert task.role == AgentRole.ANALYST
     assert "intervention" in task.objective.lower()

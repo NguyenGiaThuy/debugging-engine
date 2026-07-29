@@ -243,6 +243,25 @@ def run_stub_investigation(service: CaseService, issue_path: Path) -> dict:
                 ),
             ]
         )
+        # Re-engage Adversary on unrebutted SUPPORTS before root-cause acceptance.
+        task = service.next_task(case_id)
+        assert task["role"] == AgentRole.ADVERSARY.value
+        service.submit(
+            [
+                _event(
+                    case_id,
+                    EventType.INTERPRETATION_SUBMITTED,
+                    AgentRole.ADVERSARY,
+                    {
+                        "id": new_id(),
+                        "evidence_id": fix_ev,
+                        "hypothesis_id": hyp_logging,
+                        "outcome": "WEAKENS",
+                        "rationale": "Passing fix falsifies logging-overhead alternative.",
+                    },
+                ),
+            ]
+        )
         task = service.next_task(case_id)
         assert task["role"] == AgentRole.JUDGE.value
         service.submit(

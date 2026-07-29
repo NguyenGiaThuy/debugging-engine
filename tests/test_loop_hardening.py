@@ -40,77 +40,50 @@ def test_resolve_under_root_rejects_escape(tmp_path: Path):
 
 
 def test_verify_path_escape_fails_experiment(tmp_path: Path):
+    """Escaping patch paths are rejected at ExperimentProposed (fail closed)."""
     svc, case_id = _open(tmp_path)
     st = svc.engine.project(case_id)
     assert st is not None
     unk = next(iter(st.unknowns))
     hid, eid = new_id(), new_id()
-    svc.submit(
-        [
-            DomainEvent(
-                case_id=case_id,
-                event_type=EventType.HYPOTHESIS_PROPOSED,
-                timestamp=utc_now(),
-                producer=AgentRole.ANALYST,
-                payload={
-                    "id": hid,
-                    "unknown_id": unk,
-                    "title": "h",
-                    "explanation": "e",
-                },
-            ),
-            DomainEvent(
-                case_id=case_id,
-                event_type=EventType.EXPERIMENT_PROPOSED,
-                timestamp=utc_now(),
-                producer=AgentRole.ANALYST,
-                payload={
-                    "id": eid,
-                    "unknown_id": unk,
-                    "title": "evil patch",
-                    "information_gain": "HIGH",
-                    "cost": "LOW",
-                    "affected_hypotheses": [hid],
-                    "experiment_class": "intervention",
-                    "verification_spec": {
-                        "command": ["python", "-c", "print(1)"],
-                        "expected_exit_code": 0,
-                        "working_directory": ".",
+    with pytest.raises(ValidationError, match="patch paths"):
+        svc.submit(
+            [
+                DomainEvent(
+                    case_id=case_id,
+                    event_type=EventType.HYPOTHESIS_PROPOSED,
+                    timestamp=utc_now(),
+                    producer=AgentRole.ANALYST,
+                    payload={
+                        "id": hid,
+                        "unknown_id": unk,
+                        "title": "h",
+                        "explanation": "e",
                     },
-                    "patch": {"../escape.txt": "pwned\n"},
-                },
-            ),
-            DomainEvent(
-                case_id=case_id,
-                event_type=EventType.HYPOTHESIS_PROPOSED,
-                timestamp=utc_now(),
-                producer=AgentRole.ADVERSARY,
-                payload={
-                    "id": new_id(),
-                    "unknown_id": unk,
-                    "title": "alt",
-                    "explanation": "e",
-                },
-            ),
-        ]
-    )
-    svc.next_task(case_id)
-    svc.submit(
-        [
-            DomainEvent(
-                case_id=case_id,
-                event_type=EventType.EXPERIMENT_APPROVED,
-                timestamp=utc_now(),
-                producer=AgentRole.JUDGE,
-                payload={"experiment_id": eid, "authority": "Judge"},
-            )
-        ]
-    )
-    emitted = run_verification(svc.engine, case_id, eid, svc.repo_root)
-    assert any(e.event_type == EventType.VERIFICATION_FAILED for e in emitted)
-    st = svc.engine.project(case_id)
-    assert st is not None
-    assert st.experiments[eid].status == ExperimentStatus.FAILED
+                ),
+                DomainEvent(
+                    case_id=case_id,
+                    event_type=EventType.EXPERIMENT_PROPOSED,
+                    timestamp=utc_now(),
+                    producer=AgentRole.ANALYST,
+                    payload={
+                        "id": eid,
+                        "unknown_id": unk,
+                        "title": "evil patch",
+                        "information_gain": "HIGH",
+                        "cost": "LOW",
+                        "affected_hypotheses": [hid],
+                        "experiment_class": "intervention",
+                        "verification_spec": {
+                            "command": ["python", "-c", "print(1)"],
+                            "expected_exit_code": 0,
+                            "working_directory": ".",
+                        },
+                        "patch": {"../escape.txt": "pwned\n"},
+                    },
+                ),
+            ]
+        )
     assert not (tmp_path / "escape.txt").exists()
 
 
@@ -298,7 +271,7 @@ def test_root_cause_requires_evidence_and_judge(tmp_path: Path):
             },
         },
     )
-    with pytest.raises(ValidationError, match="supporting interpretation"):
+    with pytest.raises(ValidationError, match="authority Judge"):
         svc.submit(
             [
                 DomainEvent(
@@ -307,6 +280,22 @@ def test_root_cause_requires_evidence_and_judge(tmp_path: Path):
                     timestamp=utc_now(),
                     producer=AgentRole.JUDGE,
                     payload={"hypothesis_id": hid, "rationale": "because"},
+                )
+            ]
+        )
+    with pytest.raises(ValidationError, match="supporting interpretation"):
+        svc.submit(
+            [
+                DomainEvent(
+                    case_id=case_id,
+                    event_type=EventType.ROOT_CAUSE_ACCEPTED,
+                    timestamp=utc_now(),
+                    producer=AgentRole.JUDGE,
+                    payload={
+                        "hypothesis_id": hid,
+                        "rationale": "because",
+                        "authority": "Judge",
+                    },
                 )
             ]
         )

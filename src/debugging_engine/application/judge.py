@@ -13,6 +13,7 @@ from debugging_engine.domain.models import (
     ExperimentStatus,
     HypothesisStatus,
     InformationGain,
+    InterpretationOutcome,
     InvestigationStatus,
 )
 from debugging_engine.domain.policies import (
@@ -199,6 +200,50 @@ def active_hypothesis_count(state: CaseState, unknown_id: str) -> int:
 
 def budget_remaining(state: CaseState, unknown_id: str) -> int:
     return max(0, MAX_ACTIVE_HYPOTHESES_PER_UNKNOWN - active_hypothesis_count(state, unknown_id))
+
+
+def unrebutted_supports_evidence_ids(state: CaseState) -> list[str]:
+    """Evidence with SUPPORTS but no Adversary interpretation yet.
+
+    Used to re-engage the Adversary after new results without infinite debate:
+    each evidence id is challenged at most once by the Adversary.
+    """
+    needing: list[str] = []
+    for ev in state.evidence.values():
+        interps = [i for i in state.interpretations.values() if i.evidence_id == ev.id]
+        if not interps:
+            continue
+        if any(i.producer == AgentRole.ADVERSARY for i in interps):
+            continue
+        if any(i.outcome == InterpretationOutcome.SUPPORTS for i in interps):
+            needing.append(ev.id)
+    return needing
+
+
+def _adversary_rebuttal_task(state: CaseState, evidence_ids: list[str]) -> Task:
+    return Task(
+        case_id=state.case_id,
+        role=AgentRole.ADVERSARY,
+        objective=(
+            "New supporting evidence lacks an Adversary rebuttal. "
+            "Submit a competing interpretation, weaken/support with rationale, "
+            "or propose a discriminating experiment."
+        ),
+        allowed_event_types=[
+            EventType.INTERPRETATION_SUBMITTED.value,
+            EventType.EXPERIMENT_PROPOSED.value,
+            EventType.HYPOTHESIS_PROPOSED.value,
+            EventType.HYPOTHESIS_SUSPENDED.value,
+        ],
+        projection={
+            **_slice_for_role(state, AgentRole.ADVERSARY),
+            "unrebutted_evidence_ids": evidence_ids,
+        },
+        hints=[
+            "Announce this Adversary handoff in chat before challenging.",
+            "Object using a defined category, or concede with an explicit interpretation.",
+        ],
+    )
 
 
 def schedule_next_task(state: CaseState) -> Task:
@@ -390,6 +435,9 @@ def schedule_next_task(state: CaseState) -> Task:
 
     proposed = [e for e in state.experiments.values() if e.status == ExperimentStatus.PROPOSED]
     if proposed:
+        unrebutted = unrebutted_supports_evidence_ids(state)
+        if unrebutted:
+            return _adversary_rebuttal_task(state, unrebutted)
         proposed.sort(key=lambda e: (-GAIN_RANK[e.information_gain], COST_RANK[e.cost]))
         best = proposed[0]
         if best.information_gain == InformationGain.MINIMAL and best.cost == ExperimentCost.CRITICAL:
@@ -473,6 +521,10 @@ def schedule_next_task(state: CaseState) -> Task:
                 hints=["Announce this Adversary handoff in chat before challenging."],
             )
 
+    unrebutted = unrebutted_supports_evidence_ids(state)
+    if unrebutted:
+        return _adversary_rebuttal_task(state, unrebutted)
+
     supported = [
         h
         for h in state.hypotheses.values()
@@ -490,7 +542,7 @@ def schedule_next_task(state: CaseState) -> Task:
     if supported and state.evidence:
         best = supported[0]
         successful_fix = any(
-            e.experiment_class == "intervention"
+            (e.experiment_class == "intervention" or bool(e.patch))
             and e.status == ExperimentStatus.COMPLETED
             and any(
                 ev.experiment_id == e.id and ev.attributes.get("passed") is True

@@ -26,7 +26,8 @@ You may propose many hypotheses/experiments in one `submit`, but the Judge sched
 6. Drive through a verified **intervention fix** before `RootCauseAccepted` when a code fix is in scope.
 7. Escalate with `InvestigationEscalated` only for groundbreaking, safety, or human-only blockers — not merely because multiple defects were found.
 8. After every `submit`, call `debugging-engine next` before more work. Never stay on a prior role announcement across handoffs.
-9. Only **Judge** may submit `ExperimentApproved` / accept root cause. Analyst must never self-approve, declare "claims confirmed," run `verify`, or apply intervention patches unless the current Task role is Implementer/Verifier. `PatchApplied` requires Implementer.
+9. Only **Judge** may submit `ExperimentApproved` / accept root cause (`authority: Judge` required). Analyst must never self-approve, declare "claims confirmed," run `verify`, or apply intervention patches unless the current Task role is Implementer/Verifier. `PatchApplied` requires Implementer.
+10. After new **SUPPORTS** evidence, expect an **Adversary** rebuttal handoff before the next approve/accept — do not skip it.
 
 ## Loop
 
