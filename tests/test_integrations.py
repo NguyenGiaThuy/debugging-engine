@@ -139,7 +139,7 @@ def test_uninstall_force_removes_modified(tmp_path: Path):
 
 def test_cli_agent_uninstall(tmp_path: Path):
     runner.invoke(app, ["--agent", "claude", "--path", str(tmp_path)])
-    result = runner.invoke(app, ["--agent", "claude", "--uninstall", "--path", str(tmp_path)])
+    result = runner.invoke(app, ["--uninstall", "claude", "--path", str(tmp_path)])
     assert result.exit_code == 0, result.output
     payload = json.loads(result.stdout)
     assert payload["agent"] == "claude"
@@ -147,10 +147,9 @@ def test_cli_agent_uninstall(tmp_path: Path):
     assert not (tmp_path / ".claude/skills/debugging-engine-investigate").exists()
 
 
-def test_cli_uninstall_requires_agent(tmp_path: Path):
+def test_cli_uninstall_requires_value(tmp_path: Path):
     result = runner.invoke(app, ["--uninstall", "--path", str(tmp_path)])
-    assert result.exit_code == 1
-    assert "--agent" in result.output
+    assert result.exit_code != 0
 
 
 def test_uninstall_cli_success(monkeypatch):
@@ -199,7 +198,7 @@ def test_cli_multi_agent_uninstall(tmp_path: Path):
     assert (tmp_path / ".cursor/skills/debugging-engine-investigate/SKILL.md").is_file()
 
     result = runner.invoke(
-        app, ["--agent", "claude,cursor", "--uninstall", "--path", str(tmp_path)]
+        app, ["--uninstall", "claude,cursor", "--path", str(tmp_path)]
     )
     assert result.exit_code == 0, result.output
     payload = json.loads(result.stdout)
@@ -211,7 +210,7 @@ def test_cli_multi_agent_uninstall(tmp_path: Path):
 
 def test_cli_all_uninstall(tmp_path: Path):
     runner.invoke(app, ["--agent", "all", "--path", str(tmp_path)])
-    result = runner.invoke(app, ["--agent", "all", "--uninstall", "--path", str(tmp_path)])
+    result = runner.invoke(app, ["--uninstall", "all", "--path", str(tmp_path)])
     assert result.exit_code == 0, result.output
     payload = json.loads(result.stdout)
     assert set(payload["agents"]) == set(AGENTS)
@@ -226,16 +225,24 @@ def test_cli_invalid_multi_agent(tmp_path: Path):
 
 
 def test_cli_all_mixed_rejected(tmp_path: Path):
-    result = runner.invoke(app, ["--agent", "all,claude", "--uninstall", "--path", str(tmp_path)])
+    result = runner.invoke(app, ["--uninstall", "all,claude", "--path", str(tmp_path)])
     assert result.exit_code == 1
     assert "mix" in result.output.lower() or "Do not mix" in result.output
 
 
 def test_cli_single_uninstall_shape_unchanged(tmp_path: Path):
     runner.invoke(app, ["--agent", "codex", "--path", str(tmp_path)])
-    result = runner.invoke(app, ["--agent", "codex", "--uninstall", "--path", str(tmp_path)])
+    result = runner.invoke(app, ["--uninstall", "codex", "--path", str(tmp_path)])
     assert result.exit_code == 0, result.output
     payload = json.loads(result.stdout)
     assert payload["agent"] == "codex"
     assert "agents" not in payload
     assert "manifest_removed" in payload
+
+
+def test_cli_agent_and_uninstall_mutually_exclusive(tmp_path: Path):
+    result = runner.invoke(
+        app, ["--agent", "claude", "--uninstall", "claude", "--path", str(tmp_path)]
+    )
+    assert result.exit_code == 1
+    assert "either --agent or --uninstall" in result.output

@@ -32,8 +32,8 @@ Install the CLI with `uv tool install`, then scaffold skills into any project:
 
 ```bash
 debugging-engine --agent claude|cursor|copilot|codex
-debugging-engine --agent claude,cursor --uninstall
-debugging-engine --agent all --uninstall
+debugging-engine --uninstall claude,cursor
+debugging-engine --uninstall all
 debugging-engine uninstall-cli
 ```
 

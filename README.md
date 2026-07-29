@@ -58,8 +58,8 @@ debugging-engine --agent all
 debugging-engine --agent cursor --force
 debugging-engine --agent cursor --path /other/repo
 
-debugging-engine --agent claude --uninstall
-debugging-engine --agent all --uninstall --force
+debugging-engine --uninstall claude
+debugging-engine --uninstall all --force
 debugging-engine uninstall-cli    # uv tool uninstall debugging-engine
 ```
 

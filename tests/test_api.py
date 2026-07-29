@@ -20,7 +20,7 @@ from fixtures import cache_miss_workspace
 
 
 def test_public_exports():
-    assert __version__ == "0.8.0"
+    assert __version__ == "0.9.0"
     assert callable(schedule_next_task)
     assert issubclass(DefaultSchedulingPolicy, object)
 

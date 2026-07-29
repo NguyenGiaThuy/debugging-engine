@@ -44,42 +44,46 @@ def main(
     agent: Optional[str] = typer.Option(
         None,
         "--agent",
-        help="Scaffold or uninstall Debugging Engine skills for coding agents. "
+        help="Scaffold Debugging Engine skills for coding agents. "
         "Comma-separated list or 'all' (claude, cursor, copilot, codex).",
+        metavar="AGENTS",
     ),
-    uninstall: bool = typer.Option(
-        False,
+    uninstall: Optional[str] = typer.Option(
+        None,
         "--uninstall",
-        help="Remove scaffolded skills for --agent (use with --agent).",
+        help="Remove scaffolded skills. Pass agent name(s) or 'all' "
+        "(e.g. --uninstall claude or --uninstall all).",
+        metavar="AGENTS",
     ),
     force: bool = typer.Option(
         False,
         "--force",
-        help="With --agent: overwrite on install, or delete modified files on --uninstall.",
+        help="Overwrite on --agent install, or delete modified files on --uninstall.",
     ),
     path: Path = typer.Option(
         Path("."),
         "--path",
-        help="Project root for --agent scaffolding/uninstall (default: cwd).",
+        help="Project root for --agent / --uninstall (default: cwd).",
         file_okay=False,
         dir_okay=True,
         writable=True,
         resolve_path=True,
     ),
 ) -> None:
-    """Scaffold or uninstall agent skills when --agent is set without a subcommand."""
+    """Scaffold or uninstall agent skills when --agent / --uninstall is set without a subcommand."""
     if ctx.invoked_subcommand is not None:
         return
-    if uninstall and agent is None:
-        console.print("[red]--uninstall requires --agent <name>.[/red]")
-        console.print(f"Supported agents: {', '.join(list_agent_keys())} (or 'all')")
+    if agent is not None and uninstall is not None:
+        console.print("[red]Use either --agent or --uninstall, not both.[/red]")
         raise typer.Exit(code=1)
-    if agent is None:
+    if agent is None and uninstall is None:
         typer.echo(ctx.get_help())
         raise typer.Exit(code=0)
 
+    raw = uninstall if uninstall is not None else agent
+    assert raw is not None
     try:
-        keys = parse_agent_keys(agent)
+        keys = parse_agent_keys(raw)
     except ValueError as exc:
         console.print(f"[red]{exc}[/red]")
         console.print(f"Supported agents: {', '.join(list_agent_keys())} (or 'all')")
@@ -90,7 +94,7 @@ def main(
         raise typer.Exit(code=1) from exc
 
     try:
-        if uninstall:
+        if uninstall is not None:
             result = uninstall_agents(keys, path, force=force)
         else:
             result = scaffold_agents(keys, path, force=force)

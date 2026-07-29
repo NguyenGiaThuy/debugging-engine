@@ -1,6 +1,6 @@
 # Debugging Engine public API
 
-**Status:** Stable for Phase 3+ (package `0.8.0`). See [ADR 0005](decisions/0005-public-framework-api.md).
+**Status:** Stable for Phase 3+ (package `0.9.0`). See [ADR 0005](decisions/0005-public-framework-api.md).
 
 Debugging Engine is an **agent-agnostic investigation kernel**. This API does **not** run Analyst/Adversary/Implementer LLMs. Coding agents call these methods (or the CLI) to advance Case State.
 
