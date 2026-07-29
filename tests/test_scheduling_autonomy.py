@@ -69,6 +69,18 @@ def _submit_hyp_and_exp(
     return hid, eid
 
 
+def test_single_hyp_with_proposed_experiment_schedules_adversary(tmp_path: Path):
+    """Dialectic runs before approving brand-new proposals when only one hyp exists."""
+    root = tmp_path / "ws"
+    root.mkdir()
+    (root / "issue.md").write_text("# t\n", encoding="utf-8")
+    svc = CaseService(repo_root=root, store_root=tmp_path / "cases")
+    case_id, _ = svc.open_issue(root / "issue.md")
+    _submit_hyp_and_exp(svc, case_id)
+    task = schedule_next_task(svc.engine.project(case_id))  # type: ignore[arg-type]
+    assert task.role == AgentRole.ADVERSARY
+
+
 def test_single_hyp_approved_experiment_schedules_verifier(tmp_path: Path):
     root = tmp_path / "ws"
     root.mkdir()
@@ -76,6 +88,27 @@ def test_single_hyp_approved_experiment_schedules_verifier(tmp_path: Path):
     svc = CaseService(repo_root=root, store_root=tmp_path / "cases")
     case_id, _ = svc.open_issue(root / "issue.md")
     _, eid = _submit_hyp_and_exp(svc, case_id)
+    # Second hyp so approve path is reachable without re-entering Adversary gate
+    st = svc.engine.project(case_id)
+    assert st is not None
+    unk = next(iter(st.unknowns))
+    svc.submit(
+        [
+            DomainEvent(
+                case_id=case_id,
+                event_type=EventType.HYPOTHESIS_PROPOSED,
+                timestamp=utc_now(),
+                producer=AgentRole.ADVERSARY,
+                payload={
+                    "id": new_id(),
+                    "unknown_id": unk,
+                    "title": "alt",
+                    "explanation": "e",
+                    "assumptions": [],
+                },
+            )
+        ]
+    )
     svc.submit(
         [
             DomainEvent(

@@ -12,7 +12,7 @@ disable-model-invocation: true
 
 You are the **coding-agent brain** for Debugging Engine. The kernel owns Case State; you do not hide investigation state in chat.
 
-There is **one coding agent** playing Judge-assigned roles (Analyst, Adversary, Implementer, Verifier, Judge). There is no separate Verifier chat process — when `next` returns `role=Verifier`, announce that handoff and run verify.
+There is **one coding agent** playing Judge-assigned roles (Analyst, Adversary, Implementer, Verifier, Judge). There are no separate chat processes per role — when `next` returns a role, you must announce that handoff in chat.
 
 ## Rules
 
@@ -46,14 +46,18 @@ If no issue file exists, create a short markdown (symptoms, success criteria) th
 debugging-engine next <case-id>
 ```
 
-Act as the assigned `role`. **Announce the role and objective in chat** so handoffs (especially Verifier / Implementer) are visible.
+Act as the assigned `role`. **Announce every role handoff in chat** (Analyst, Adversary, Implementer, Verifier, and Judge) using:
 
-After `ExperimentApproved`, call `next` again before verifying — do not skip straight to `verify` without showing the Verifier (or Implementer) handoff.
+```text
+**Role: <role>** — <objective>
+```
+
+Do not skip announcements for Adversary or Judge. After `ExperimentApproved`, call `next` again before verifying — do not skip straight to `verify` without showing the Verifier (or Implementer) handoff.
 
 ### 3. Work outside the kernel
 
 - **Analyst:** hypotheses + experiment proposals (qualitative `information_gain` / `cost`). After supporting evidence, propose `experiment_class=intervention` fixes.
-- **Adversary:** alternative hypothesis or competing interpretation; use objection categories.
+- **Adversary:** alternative hypothesis or competing interpretation; use objection categories. Always announce before challenging.
 - **Implementer:** materialize approved experiment patches under the repo; submit `PatchApplied`.
 - **Verifier:** prefer `debugging-engine verify <case-id> <experiment-id>`.
 - **Judge:** approve experiments / accept root cause after a verified fix / escalate only per rule 7 — no deep code diagnosis.

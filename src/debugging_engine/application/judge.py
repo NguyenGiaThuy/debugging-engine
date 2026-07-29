@@ -268,42 +268,7 @@ def schedule_next_task(state: CaseState) -> Task:
             ],
         )
 
-    # Approve / run experiments before seeking more hypotheses so Verifier/Implementer
-    # are not starved when only one competing hypothesis exists.
-    proposed = [e for e in state.experiments.values() if e.status == ExperimentStatus.PROPOSED]
-    if proposed:
-        proposed.sort(key=lambda e: (-GAIN_RANK[e.information_gain], COST_RANK[e.cost]))
-        best = proposed[0]
-        if best.information_gain == InformationGain.MINIMAL and best.cost == ExperimentCost.CRITICAL:
-            return Task(
-                case_id=state.case_id,
-                role=AgentRole.ANALYST,
-                objective="Previous experiment has MINIMAL gain and CRITICAL cost; propose a better experiment.",
-                allowed_event_types=[EventType.EXPERIMENT_PROPOSED.value],
-                projection=_slice_for_role(state, AgentRole.ANALYST),
-            )
-        return Task(
-            case_id=state.case_id,
-            role=AgentRole.JUDGE,
-            objective=f"Approve and prepare experiment '{best.title}' ({best.id}).",
-            allowed_event_types=[
-                EventType.EXPERIMENT_APPROVED.value,
-                EventType.EXPERIMENT_SCHEDULED.value,
-            ],
-            projection={
-                "recommended_experiment_id": best.id,
-                "experiment": {
-                    "id": best.id,
-                    "title": _short(best.title),
-                    "information_gain": best.information_gain.value,
-                    "cost": best.cost.value,
-                    "status": best.status.value,
-                },
-                "metrics": _metrics_summary(state),
-            },
-            hints=["Submit ExperimentApproved then optionally ExperimentScheduled."],
-        )
-
+    # Run already-approved experiments first so Verifier/Implementer are not starved.
     runnable = [
         e
         for e in state.experiments.values()
@@ -341,6 +306,7 @@ def schedule_next_task(state: CaseState) -> Task:
                     "metrics": _metrics_summary(state),
                 },
                 hints=[
+                    "Announce this Implementer handoff in chat before writing files.",
                     "Write patch files under the repo root exactly as specified.",
                     "After PatchApplied, the next task should be Verifier.",
                 ],
@@ -372,6 +338,7 @@ def schedule_next_task(state: CaseState) -> Task:
             ],
         )
 
+    # Dialectic before approving brand-new proposals when only one competing hypothesis exists.
     competing = [
         h
         for h in state.hypotheses.values()
@@ -400,7 +367,45 @@ def schedule_next_task(state: CaseState) -> Task:
                 **_slice_for_role(state, AgentRole.ADVERSARY),
                 "budget_remaining": budget_remaining(state, unk_id),
             },
-            hints=["Objections must use a defined category.", "Prefer experiments that discriminate."],
+            hints=[
+                "Announce this Adversary handoff in chat before challenging.",
+                "Objections must use a defined category.",
+                "Prefer experiments that discriminate.",
+            ],
+        )
+
+    proposed = [e for e in state.experiments.values() if e.status == ExperimentStatus.PROPOSED]
+    if proposed:
+        proposed.sort(key=lambda e: (-GAIN_RANK[e.information_gain], COST_RANK[e.cost]))
+        best = proposed[0]
+        if best.information_gain == InformationGain.MINIMAL and best.cost == ExperimentCost.CRITICAL:
+            return Task(
+                case_id=state.case_id,
+                role=AgentRole.ANALYST,
+                objective="Previous experiment has MINIMAL gain and CRITICAL cost; propose a better experiment.",
+                allowed_event_types=[EventType.EXPERIMENT_PROPOSED.value],
+                projection=_slice_for_role(state, AgentRole.ANALYST),
+            )
+        return Task(
+            case_id=state.case_id,
+            role=AgentRole.JUDGE,
+            objective=f"Approve and prepare experiment '{best.title}' ({best.id}).",
+            allowed_event_types=[
+                EventType.EXPERIMENT_APPROVED.value,
+                EventType.EXPERIMENT_SCHEDULED.value,
+            ],
+            projection={
+                "recommended_experiment_id": best.id,
+                "experiment": {
+                    "id": best.id,
+                    "title": _short(best.title),
+                    "information_gain": best.information_gain.value,
+                    "cost": best.cost.value,
+                    "status": best.status.value,
+                },
+                "metrics": _metrics_summary(state),
+            },
+            hints=["Submit ExperimentApproved then optionally ExperimentScheduled."],
         )
 
     completed = [e for e in state.experiments.values() if e.status == ExperimentStatus.COMPLETED]
@@ -441,6 +446,7 @@ def schedule_next_task(state: CaseState) -> Task:
                     EventType.EXPERIMENT_PROPOSED.value,
                 ],
                 projection=_slice_for_role(state, AgentRole.ADVERSARY),
+                hints=["Announce this Adversary handoff in chat before challenging."],
             )
 
     supported = [
