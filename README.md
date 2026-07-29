@@ -63,14 +63,6 @@ debugging-engine --uninstall all --force
 debugging-engine uninstall-cli    # uv tool uninstall debugging-engine
 ```
 
-Empty agent skill directories (for example `.agents/` or `.claude/skills/`) are removed when uninstall leaves them empty.
-
-Skills:
-
-- `debugging-engine-investigate` — general debugging
-- `debugging-engine-incident` — production incidents
-- `debugging-engine-performance` — latency / throughput / memory
-
 ## CLI
 
 ```bash
@@ -116,12 +108,3 @@ Debugging Engine **v1.0.0** specification: [`docs/SPECIFICATION.md`](docs/SPECIF
 | `src/debugging_engine/` | Kernel, CLI, skill templates, offline fixtures |
 | `.cursor/skills/` | Cursor skills (synced from package templates) |
 | `.debugging-engine/cases/` | Local Event Logs (gitignored) |
-
-## Development
-
-```bash
-uv pip install -e ".[dev]"
-pytest
-uv build
-uv publish   # requires UV_PUBLISH_TOKEN / PyPI credentials
-```
