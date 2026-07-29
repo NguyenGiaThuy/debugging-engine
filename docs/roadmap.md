@@ -4,7 +4,7 @@ Debugging Engine is architecture (an investigation kernel). Skills and IDE wrapp
 
 ## Phase 1 — Runtime MVP (done)
 
-Minimal agent-agnostic Python CLI kernel: domain model, JSONL Event Log, Case State projection, Judge task handoff, in-engine Verifier, seeded `subject/` defects, stub e2e.
+Minimal agent-agnostic Python CLI kernel: domain model, JSONL Event Log, Case State projection, Judge task handoff, in-engine Verifier, stub e2e.
 
 ## Phase 2 — Validate the architecture (done)
 
@@ -26,7 +26,7 @@ Cursor project skills wrap the kernel (templates now live in-package; see Phase 
 
 See [ADR 0006](decisions/0006-skills-as-interfaces.md).
 
-## Phase 5 — Agent scaffolding + uv tool install (current)
+## Phase 5 — Agent scaffolding + uv tool install (done)
 
 Install the CLI with `uv tool install`, then scaffold skills into any project:
 
@@ -38,6 +38,8 @@ debugging-engine uninstall-cli
 ```
 
 Canonical templates: `src/debugging_engine/integrations/templates/skills/`. See [ADR 0007](decisions/0007-agent-scaffolding.md).
+
+Offline `demo` / `validate` use a packaged cache-miss fixture (not an in-repo `subject/` tree).
 
 ## Explicit non-goals (until later)
 

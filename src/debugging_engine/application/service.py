@@ -132,7 +132,7 @@ class CaseService:
                     "title": title,
                     "description": text[:4000],
                     "priority": "HIGH",
-                    "related_components": ["subject/"],
+                    "related_components": [],
                 },
             ),
         ]

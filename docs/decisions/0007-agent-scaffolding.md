@@ -12,7 +12,7 @@ Phase 4 shipped Cursor skills in-repo. Consumers need the same skills in arbitra
 4. Scaffolding also ensures `.debugging-engine/` is gitignored and writes `.debugging-engine/integration.json`.
 5. Uninstall skills with `debugging-engine --agent <name> --uninstall` (template-identical files only; `--force` deletes modified skill trees). Uninstall the uv tool with `debugging-engine uninstall-cli` (`uv tool uninstall debugging-engine`).
 6. `--agent` accepts a comma-separated list or `all` for batch install/uninstall in one call.
-7. Package version advances to **0.7.0**.
+7. Package version advances to **0.7.0** (later **0.8.0** removes the in-repo `subject/` demo tree; offline fixtures ship in-package).
 
 ## Rationale
 

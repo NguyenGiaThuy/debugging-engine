@@ -1,13 +1,13 @@
 # Debugging Engine public API
 
-**Status:** Stable for Phase 3+ (package `0.7.0`). See [ADR 0005](decisions/0005-public-framework-api.md).
+**Status:** Stable for Phase 3+ (package `0.8.0`). See [ADR 0005](decisions/0005-public-framework-api.md).
 
 Debugging Engine is an **agent-agnostic investigation kernel**. This API does **not** run Analyst/Adversary/Implementer LLMs. Coding agents call these methods (or the CLI) to advance Case State.
 
 ## Install
 
 ```bash
-uv tool install debugging-engine --from git+https://github.com/NguyenGiaThuy/debugging-engine
+uv tool install debugging-engine
 # or for local development:
 uv pip install -e ".[dev]"
 ```
@@ -21,7 +21,7 @@ from debugging_engine import Case, Engine, DomainEvent, EventType, AgentRole
 from datetime import datetime, timezone
 
 engine = Engine(repo_root=".")
-case = Case.open(engine, "subject/issues/001-cache-miss.md")
+case = Case.open(engine, "issues/my-bug.md")
 
 task = case.next()          # Judge scheduling → Task
 print(task.role, task.objective)
@@ -37,14 +37,14 @@ print(case.status()["status"])
 
 | Symbol | Module | Purpose |
 | --- | --- | --- |
-| `Engine` | `debugging-engine` | Repo/store + optional `SchedulingPolicy` |
-| `Case` | `debugging-engine` | Bound investigation (`open`, `load`, `next`, `submit`, `verify`, …) |
-| `Task` | `debugging-engine` | Judge handoff (role, projection, allowed events) |
-| `DomainEvent` / `EventType` | `debugging-engine` | Event envelope types |
-| `ValidationError` | `debugging-engine` | Illegal state transitions / budgets |
-| `SchedulingPolicy` | `debugging-engine` / `debugging_engine.policies` | Protocol for custom Judges |
+| `Engine` | `debugging_engine` | Repo/store + optional `SchedulingPolicy` |
+| `Case` | `debugging_engine` | Bound investigation (`open`, `load`, `next`, `submit`, `verify`, …) |
+| `Task` | `debugging_engine` | Judge handoff (role, projection, allowed events) |
+| `DomainEvent` / `EventType` | `debugging_engine` | Event envelope types |
+| `ValidationError` | `debugging_engine` | Illegal state transitions / budgets |
+| `SchedulingPolicy` | `debugging_engine` / `debugging_engine.policies` | Protocol for custom Judges |
 | `DefaultSchedulingPolicy` | `debugging_engine.policies` | Built-in Part IV Judge |
-| `schedule_next_task` | `debugging-engine` | Function form of the default policy |
+| `schedule_next_task` | `debugging_engine` | Function form of the default policy |
 
 ## Engine
 
@@ -52,7 +52,7 @@ print(case.status()["status"])
 Engine(repo_root=".", store_root=None, policy=None)
 ```
 
-- `repo_root` — workspace containing `subject/` (or any project under investigation)
+- `repo_root` — project under investigation (cwd of the coding agent)
 - `store_root` — Event Log root (default `<repo>/.debugging-engine/cases`)
 - `policy` — `SchedulingPolicy` used by `Case.next()`
 
@@ -87,7 +87,7 @@ class AlwaysEscalate:
         )
 
 engine = Engine(repo_root=".", policy=AlwaysEscalate())
-case = Case.open(engine, "subject/issues/001-cache-miss.md")
+case = Case.open(engine, "issues/my-bug.md")
 print(case.next().objective)
 ```
 

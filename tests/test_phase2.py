@@ -31,6 +31,7 @@ from debugging_engine.runtime.stubs.scenarios import (
     scenario_hypothesis_flood,
     scenario_starvation,
 )
+from fixtures import cache_miss_workspace
 
 
 def test_truncate_observation():
@@ -41,9 +42,8 @@ def test_truncate_observation():
 
 
 def test_hypothesis_budget_validation(tmp_path: Path):
-    root = Path(__file__).resolve().parents[1]
-    svc = CaseService(root, store_root=tmp_path / "cases")
-    issue = root / "subject" / "issues" / "001-cache-miss.md"
+    workspace, issue = cache_miss_workspace(tmp_path)
+    svc = CaseService(workspace, store_root=tmp_path / "cases")
     case_id, _ = svc.open_issue(issue)
     unk = next(iter(svc.engine.project(case_id).unknowns))  # type: ignore[union-attr]
     for i in range(MAX_ACTIVE_HYPOTHESES_PER_UNKNOWN):
@@ -106,9 +106,8 @@ def test_judge_no_logging_heuristic():
 
 
 def test_stall_escalation_task(tmp_path: Path):
-    root = Path(__file__).resolve().parents[1]
-    svc = CaseService(root, store_root=tmp_path / "cases")
-    issue = root / "subject" / "issues" / "001-cache-miss.md"
+    workspace, issue = cache_miss_workspace(tmp_path)
+    svc = CaseService(workspace, store_root=tmp_path / "cases")
     case_id, _ = svc.open_issue(issue)
     unk = next(iter(svc.engine.project(case_id).unknowns))  # type: ignore[union-attr]
     svc.submit(
@@ -147,17 +146,12 @@ def test_stall_escalation_task(tmp_path: Path):
 
 
 def test_phase2_scenarios(tmp_path: Path):
-    root = Path(__file__).resolve().parents[1]
-    issue = root / "subject" / "issues" / "001-cache-miss.md"
-    buggy = (root / "subject" / "cache.py").read_text(encoding="utf-8")
-    try:
-        svc = CaseService(root, store_root=tmp_path / "cases")
-        assert scenario_hypothesis_flood(svc, issue)["ok"]
-        svc2 = CaseService(root, store_root=tmp_path / "cases2")
-        assert scenario_starvation(svc2, issue)["ok"]
-        svc3 = CaseService(root, store_root=tmp_path / "cases3")
-        assert scenario_evidence_bloat(svc3, issue)["ok"]
-        svc4 = CaseService(root, store_root=tmp_path / "cases4")
-        assert scenario_happy_cache(svc4, issue)["ok"]
-    finally:
-        (root / "subject" / "cache.py").write_text(buggy, encoding="utf-8")
+    workspace, issue = cache_miss_workspace(tmp_path)
+    svc = CaseService(workspace, store_root=tmp_path / "cases")
+    assert scenario_hypothesis_flood(svc, issue)["ok"]
+    svc2 = CaseService(workspace, store_root=tmp_path / "cases2")
+    assert scenario_starvation(svc2, issue)["ok"]
+    svc3 = CaseService(workspace, store_root=tmp_path / "cases3")
+    assert scenario_evidence_bloat(svc3, issue)["ok"]
+    svc4 = CaseService(workspace, store_root=tmp_path / "cases4")
+    assert scenario_happy_cache(svc4, issue)["ok"]

@@ -73,41 +73,13 @@ def test_hypothesis_requires_unknown(tmp_path: Path):
 
 
 def test_stub_demo_resolves(tmp_path: Path):
-    root = Path(__file__).resolve().parents[1]
-    cache_path = root / "subject" / "cache.py"
-    original = cache_path.read_text(encoding="utf-8")
-    buggy = '''\
-"""Tiny in-memory cache used as the Debugging Engine investigation subject."""
+    from fixtures import cache_miss_workspace
 
-
-def normalize_key(key: str) -> str:
-    # BUG: unused on set path — get lowercases, set does not.
-    return key.strip().lower()
-
-
-class Cache:
-    def __init__(self) -> None:
-        self._store: dict[str, object] = {}
-
-    def set(self, key: str, value: object) -> None:
-        # BUG: stores raw key without normalization
-        self._store[key] = value
-
-    def get(self, key: str) -> object | None:
-        return self._store.get(key.lower())
-
-    def __contains__(self, key: str) -> bool:
-        return key.lower() in self._store
-'''
-    cache_path.write_text(buggy, encoding="utf-8")
-    try:
-        svc = CaseService(root, store_root=tmp_path / "cases")
-        issue = root / "subject" / "issues" / "001-cache-miss.md"
-        result = run_stub_investigation(svc, issue)
-        assert result["status"] == "RESOLVED"
-        assert "root_cause_hypothesis_id" in result["decision_state"]
-        replayed = svc.replay(result["case_id"])
-        assert replayed["status"] == "RESOLVED"
-        assert replayed["event_count"] == len(svc.log(result["case_id"]))
-    finally:
-        cache_path.write_text(original, encoding="utf-8")
+    workspace, issue = cache_miss_workspace(tmp_path)
+    svc = CaseService(workspace, store_root=tmp_path / "cases")
+    result = run_stub_investigation(svc, issue)
+    assert result["status"] == "RESOLVED"
+    assert "root_cause_hypothesis_id" in result["decision_state"]
+    replayed = svc.replay(result["case_id"])
+    assert replayed["status"] == "RESOLVED"
+    assert replayed["event_count"] == len(svc.log(result["case_id"]))

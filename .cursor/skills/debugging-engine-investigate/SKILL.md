@@ -33,7 +33,7 @@ open issue → next → (reason/edit) → submit events and/or verify → next �
 debugging-engine open path/to/issue.md
 ```
 
-If no issue file exists, create a short markdown under `subject/issues/` (symptoms, success criteria) then open it.
+If no issue file exists, create a short markdown (symptoms, success criteria) then open it.
 
 ### 2. Next
 
@@ -47,7 +47,7 @@ Act as the assigned `role` (Analyst, Adversary, Implementer, Verifier, Judge).
 
 - **Analyst:** hypotheses + experiment proposals (qualitative `information_gain` / `cost`).
 - **Adversary:** alternative hypothesis or competing interpretation; use objection categories.
-- **Implementer:** patches under the subject tree only as approved experiments require.
+- **Implementer:** patches in the project under investigation only as approved experiments require.
 - **Verifier:** prefer `debugging-engine verify <case-id> <experiment-id>`.
 - **Judge:** approve experiments / accept root cause / escalate — no deep code diagnosis.
 
@@ -71,7 +71,7 @@ Summarize for the user: unknown, accepted root cause (or escalation), key eviden
 ```python
 from debugging_engine import Case, Engine
 engine = Engine(repo_root=".")
-case = Case.open(engine, "subject/issues/001-cache-miss.md")
+case = Case.open(engine, "issues/my-bug.md")
 task = case.next()
 ```
 

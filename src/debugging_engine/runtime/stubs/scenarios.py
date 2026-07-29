@@ -132,7 +132,7 @@ def scenario_starvation(service: CaseService, issue_path: Path) -> dict[str, Any
                     "cost": "CRITICAL",
                     "affected_hypotheses": [hyp_id],
                     "verification_spec": {
-                        "command": ["python", "-m", "pytest", "subject/tests/test_cache.py", "-q"],
+                        "command": ["python", "-m", "pytest", "tests/test_cache.py", "-q"],
                         "expected_exit_code": 0,
                     },
                 },
@@ -182,8 +182,9 @@ def scenario_evidence_bloat(service: CaseService, issue_path: Path) -> dict[str,
     unknown_id = next(iter(state.unknowns))
     hyp_id = new_id()
     exp_id = new_id()
-    # Create a temp verbose test under subject that prints a huge line
-    verbose_test = service.repo_root / "subject" / "tests" / "_tmp_verbose_test.py"
+    # Create a temp verbose test that prints a huge line
+    verbose_test = service.repo_root / "tests" / "_tmp_verbose_test.py"
+    verbose_test.parent.mkdir(parents=True, exist_ok=True)
     verbose_test.write_text(
         "def test_verbose():\n"
         "    print('X' * 8000)\n"
@@ -231,7 +232,7 @@ def scenario_evidence_bloat(service: CaseService, issue_path: Path) -> dict[str,
                                 "python",
                                 "-m",
                                 "pytest",
-                                "subject/tests/_tmp_verbose_test.py",
+                                "tests/_tmp_verbose_test.py",
                                 "-q",
                                 "-s",
                             ],

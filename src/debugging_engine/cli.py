@@ -30,14 +30,8 @@ console = Console()
 
 
 def repo_root() -> Path:
-    cwd = Path.cwd()
-    if (cwd / "subject").exists() and (cwd / "pyproject.toml").exists():
-        return cwd
-    here = Path(__file__).resolve()
-    for parent in here.parents:
-        if (parent / "pyproject.toml").exists() and (parent / "subject").exists():
-            return parent
-    return cwd
+    """Investigation workspace defaults to the current working directory."""
+    return Path.cwd()
 
 
 def engine() -> Engine:
@@ -141,7 +135,7 @@ def uninstall_cli() -> None:
 
 @app.command()
 def open(
-    issue: Path = typer.Argument(..., help="Path to issue markdown under subject/issues/"),
+    issue: Path = typer.Argument(..., help="Path to issue markdown file"),
 ) -> None:
     """Create a Case + Unknown from an issue file."""
     path = issue if issue.is_absolute() else repo_root() / issue
@@ -233,75 +227,62 @@ def replay(case_id: str) -> None:
 def demo(
     issue: Optional[Path] = typer.Option(
         None,
-        help="Issue path (default: subject/issues/001-cache-miss.md)",
+        help="Issue path inside a workspace (default: materialize offline cache-miss fixture)",
     ),
 ) -> None:
     """Stub-driven end-to-end investigation (no coding agent / no LLM)."""
-    root = repo_root()
-    path = issue if issue else root / "subject" / "issues" / "001-cache-miss.md"
-    if not path.is_absolute():
-        path = root / path
-    buggy = '''\
-"""Tiny in-memory cache used as the Debugging Engine investigation subject."""
+    import tempfile
 
+    from debugging_engine.runtime.stubs.fixture import cache_miss_issue, materialize_cache_miss
 
-def normalize_key(key: str) -> str:
-    # BUG: unused on set path — get lowercases, set does not.
-    return key.strip().lower()
-
-
-class Cache:
-    def __init__(self) -> None:
-        self._store: dict[str, object] = {}
-
-    def set(self, key: str, value: object) -> None:
-        # BUG: stores raw key without normalization
-        self._store[key] = value
-
-    def get(self, key: str) -> object | None:
-        return self._store.get(key.lower())
-
-    def __contains__(self, key: str) -> bool:
-        return key.lower() in self._store
-'''
-    (root / "subject" / "cache.py").write_text(buggy, encoding="utf-8")
-    try:
-        result = run_stub_investigation(engine().service, path)
+    with tempfile.TemporaryDirectory(prefix="debugging-engine-demo-") as tmp:
+        if issue is None:
+            workspace = materialize_cache_miss(Path(tmp) / "workspace")
+            path = cache_miss_issue(workspace)
+        else:
+            workspace = repo_root()
+            path = issue if issue.is_absolute() else workspace / issue
+            if not path.exists():
+                raise typer.BadParameter(f"Issue not found: {path}")
+        eng = Engine(repo_root=workspace, store_root=Path(tmp) / "cases")
+        result = run_stub_investigation(eng.service, path)
         print_json(data=result)
-    finally:
-        (root / "subject" / "cache.py").write_text(buggy, encoding="utf-8")
 
 
 @app.command()
 def validate(
     issue: Optional[Path] = typer.Option(
         None,
-        help="Issue path (default: subject/issues/001-cache-miss.md)",
+        help="Issue path inside a workspace (default: materialize offline cache-miss fixture)",
     ),
     report: Optional[Path] = typer.Option(
         None,
-        help="Write markdown report (default: docs/validation/phase2-report.md)",
+        help="Write markdown report (default: docs/validation/phase2-report.md under cwd)",
     ),
 ) -> None:
     """Run Phase 2 architectural validation scenarios and emit metrics."""
-    root = repo_root()
-    path = issue if issue else root / "subject" / "issues" / "001-cache-miss.md"
-    if not path.is_absolute():
-        path = root / path
-    report_path = report if report else root / "docs" / "validation" / "phase2-report.md"
-    if report_path and not report_path.is_absolute():
-        report_path = root / report_path
-
-    buggy = (root / "subject" / "cache.py").read_text(encoding="utf-8")
     import tempfile
 
-    with tempfile.TemporaryDirectory(prefix="debugging-engine-validate-") as tmp:
-        eng = Engine(repo_root=root, store_root=Path(tmp) / "cases")
-        try:
-            rows = run_all_scenarios(eng.service, path)
-        finally:
-            (root / "subject" / "cache.py").write_text(buggy, encoding="utf-8")
+    from debugging_engine.runtime.stubs.fixture import cache_miss_issue, materialize_cache_miss
 
+    cwd = Path.cwd()
+    report_path = report if report else cwd / "docs" / "validation" / "phase2-report.md"
+    if report_path and not report_path.is_absolute():
+        report_path = cwd / report_path
+
+    with tempfile.TemporaryDirectory(prefix="debugging-engine-validate-") as tmp:
+        if issue is None:
+            workspace = materialize_cache_miss(Path(tmp) / "workspace")
+            path = cache_miss_issue(workspace)
+        else:
+            workspace = repo_root()
+            path = issue if issue.is_absolute() else workspace / issue
+            if not path.exists():
+                raise typer.BadParameter(f"Issue not found: {path}")
+        eng = Engine(repo_root=workspace, store_root=Path(tmp) / "cases")
+        rows = run_all_scenarios(eng.service, path)
+
+    report_path.parent.mkdir(parents=True, exist_ok=True)
     write_phase2_report(report_path, rows)
     print_json(data={"report": str(report_path), "scenarios": rows})
     if any(not r.get("ok", False) for r in rows):

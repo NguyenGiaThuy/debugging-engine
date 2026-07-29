@@ -147,7 +147,7 @@ class Hypothesis(BaseModel):
 
 class VerificationSpec(BaseModel):
     command: list[str] = Field(
-        default_factory=lambda: ["python", "-m", "pytest", "subject/tests", "-q"]
+        default_factory=lambda: ["python", "-m", "pytest", "-q"]
     )
     expected_exit_code: int = 0
     working_directory: str = "."

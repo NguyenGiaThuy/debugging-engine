@@ -16,17 +16,19 @@ from debugging_engine import (
 from debugging_engine.domain.models import AgentRole, CaseState, new_id
 from debugging_engine.policies import DefaultSchedulingPolicy
 
+from fixtures import cache_miss_workspace
+
 
 def test_public_exports():
-    assert __version__ == "0.7.0"
+    assert __version__ == "0.8.0"
     assert callable(schedule_next_task)
     assert issubclass(DefaultSchedulingPolicy, object)
 
 
 def test_case_open_next_via_api(tmp_path: Path):
-    root = Path(__file__).resolve().parents[1]
-    engine = Engine(repo_root=root, store_root=tmp_path / "cases")
-    case = Case.open(engine, root / "subject" / "issues" / "001-cache-miss.md")
+    workspace, issue = cache_miss_workspace(tmp_path)
+    engine = Engine(repo_root=workspace, store_root=tmp_path / "cases")
+    case = Case.open(engine, issue)
     task = case.next()
     assert isinstance(task, Task)
     assert task.case_id == case.case_id
@@ -39,7 +41,7 @@ def test_case_open_next_via_api(tmp_path: Path):
 
 
 def test_custom_scheduling_policy(tmp_path: Path):
-    root = Path(__file__).resolve().parents[1]
+    workspace, issue = cache_miss_workspace(tmp_path)
 
     class EscalateHint:
         def schedule(self, state: CaseState) -> Task:
@@ -53,17 +55,17 @@ def test_custom_scheduling_policy(tmp_path: Path):
             )
 
     assert isinstance(EscalateHint(), SchedulingPolicy)
-    engine = Engine(repo_root=root, store_root=tmp_path / "cases", policy=EscalateHint())
-    case = Case.open(engine, root / "subject" / "issues" / "001-cache-miss.md")
+    engine = Engine(repo_root=workspace, store_root=tmp_path / "cases", policy=EscalateHint())
+    case = Case.open(engine, issue)
     task = case.next()
     assert task.objective == "custom-policy"
     assert task.projection.get("custom") is True
 
 
 def test_submit_and_query_via_api(tmp_path: Path):
-    root = Path(__file__).resolve().parents[1]
-    engine = Engine(repo_root=root, store_root=tmp_path / "cases")
-    case = Case.open(engine, root / "subject" / "issues" / "001-cache-miss.md")
+    workspace, issue = cache_miss_workspace(tmp_path)
+    engine = Engine(repo_root=workspace, store_root=tmp_path / "cases")
+    case = Case.open(engine, issue)
     unk = next(iter(case.status()["unknowns"]))
     case.submit(
         DomainEvent(
@@ -87,9 +89,9 @@ def test_submit_and_query_via_api(tmp_path: Path):
 
 
 def test_validation_error_surfaces(tmp_path: Path):
-    root = Path(__file__).resolve().parents[1]
-    engine = Engine(repo_root=root, store_root=tmp_path / "cases")
-    case = Case.open(engine, root / "subject" / "issues" / "001-cache-miss.md")
+    workspace, issue = cache_miss_workspace(tmp_path)
+    engine = Engine(repo_root=workspace, store_root=tmp_path / "cases")
+    case = Case.open(engine, issue)
     try:
         case.submit([])
         assert False, "expected ValidationError"

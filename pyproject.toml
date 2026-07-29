@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "debugging-engine"
-version = "0.7.0"
+version = "0.8.0"
 description = "Debugging Engine — agent-agnostic investigation kernel + CLI"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -30,8 +30,11 @@ Repository = "https://github.com/NguyenGiaThuy/debugging-engine"
 where = ["src"]
 
 [tool.setuptools.package-data]
-debugging_engine = ["integrations/templates/skills/**/*"]
+debugging_engine = [
+  "integrations/templates/skills/**/*",
+  "runtime/stubs/fixtures/**/*",
+]
 
 [tool.pytest.ini_options]
-testpaths = ["tests", "subject/tests"]
-pythonpath = ["src", "subject"]
+testpaths = ["tests"]
+pythonpath = ["src", "tests"]
