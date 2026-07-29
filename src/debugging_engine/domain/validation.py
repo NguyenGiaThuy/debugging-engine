@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from debugging_engine.domain.models import (
+    AgentRole,
     CaseState,
     DomainEvent,
     EventType,
@@ -130,6 +131,17 @@ def validate_event(state: CaseState | None, event: DomainEvent) -> None:
         eid = payload.get("experiment_id")
         if not eid or eid not in state.experiments:
             raise ValidationError("ExperimentApproved requires existing experiment_id")
+        # Approval is Judge-only — Analyst/other roles must not self-approve.
+        if event.producer != AgentRole.JUDGE:
+            raise ValidationError(
+                "ExperimentApproved requires producer Judge",
+                {"producer": event.producer},
+            )
+        if payload.get("authority") != AgentRole.JUDGE:
+            raise ValidationError(
+                "ExperimentApproved requires authority Judge",
+                {"authority": payload.get("authority")},
+            )
         exp = state.experiments[eid]
         if not can_transition_experiment(exp.status, ExperimentStatus.APPROVED):
             raise ValidationError(f"Invalid experiment transition {exp.status} -> APPROVED")
@@ -280,6 +292,8 @@ def apply_event(state: CaseState | None, event: DomainEvent) -> CaseState:
             assumptions=payload.get("assumptions", []),
         )
         s.hypotheses[hyp.id] = hyp
+        if event.producer == AgentRole.ADVERSARY:
+            s.decision_state["adversary_challenged"] = True
     elif et == EventType.HYPOTHESIS_PROMOTED:
         s.hypotheses[payload["hypothesis_id"]].status = HypothesisStatus(payload["to_status"])
     elif et == EventType.HYPOTHESIS_WEAKENED:
@@ -305,6 +319,8 @@ def apply_event(state: CaseState | None, event: DomainEvent) -> CaseState:
             patch=payload.get("patch"),
         )
         s.experiments[exp.id] = exp
+        if event.producer == AgentRole.ADVERSARY:
+            s.decision_state["adversary_challenged"] = True
     elif et == EventType.EXPERIMENT_APPROVED:
         s.experiments[payload["experiment_id"]].status = ExperimentStatus.APPROVED
     elif et == EventType.EXPERIMENT_SCHEDULED:

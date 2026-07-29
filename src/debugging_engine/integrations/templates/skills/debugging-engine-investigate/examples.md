@@ -29,4 +29,4 @@ debugging-engine open issues/002-whatever.md
 debugging-engine next <case-id>
 ```
 
-Follow the Judge task: reason/edit outside the kernel, `submit` events, `verify` when scheduled.
+Follow the Judge task for the assigned role only, then `submit` allowed events, then immediately `next` again. Run `verify` only when the Task role is Verifier (after Judge approval). Analyst proposes experiments as events — does not self-approve or implement.

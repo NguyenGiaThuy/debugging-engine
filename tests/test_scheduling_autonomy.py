@@ -81,6 +81,99 @@ def test_single_hyp_with_proposed_experiment_schedules_adversary(tmp_path: Path)
     assert task.role == AgentRole.ADVERSARY
 
 
+def test_multi_hyp_batch_still_schedules_adversary_before_approve(tmp_path: Path):
+    """Analyst submitting multiple hyps+exp must not skip Adversary before Judge approve."""
+    root = tmp_path / "ws"
+    root.mkdir()
+    (root / "issue.md").write_text("# t\n", encoding="utf-8")
+    svc = CaseService(repo_root=root, store_root=tmp_path / "cases")
+    case_id, _ = svc.open_issue(root / "issue.md")
+    st = svc.engine.project(case_id)
+    assert st is not None
+    unk = next(iter(st.unknowns))
+    hid1, hid2, eid = new_id(), new_id(), new_id()
+    ts = utc_now()
+    svc.submit(
+        [
+            DomainEvent(
+                case_id=case_id,
+                event_type=EventType.HYPOTHESIS_PROPOSED,
+                timestamp=ts,
+                producer=AgentRole.ANALYST,
+                payload={
+                    "id": hid1,
+                    "unknown_id": unk,
+                    "title": "h1",
+                    "explanation": "e",
+                    "assumptions": [],
+                },
+            ),
+            DomainEvent(
+                case_id=case_id,
+                event_type=EventType.HYPOTHESIS_PROPOSED,
+                timestamp=ts,
+                producer=AgentRole.ANALYST,
+                payload={
+                    "id": hid2,
+                    "unknown_id": unk,
+                    "title": "h2",
+                    "explanation": "e",
+                    "assumptions": [],
+                },
+            ),
+            DomainEvent(
+                case_id=case_id,
+                event_type=EventType.EXPERIMENT_PROPOSED,
+                timestamp=ts,
+                producer=AgentRole.ANALYST,
+                payload={
+                    "id": eid,
+                    "unknown_id": unk,
+                    "title": "exp",
+                    "information_gain": "HIGH",
+                    "cost": "LOW",
+                    "affected_hypotheses": [hid1],
+                    "expected_observations": ["ok"],
+                    "experiment_class": "observational",
+                    "verification_spec": {
+                        "command": ["python", "-c", "print(1)"],
+                        "expected_exit_code": 0,
+                        "working_directory": ".",
+                    },
+                },
+            ),
+        ]
+    )
+    task = schedule_next_task(svc.engine.project(case_id))  # type: ignore[arg-type]
+    assert task.role == AgentRole.ADVERSARY
+
+
+def test_analyst_cannot_self_approve_experiment(tmp_path: Path):
+    from debugging_engine.domain.validation import ValidationError
+
+    root = tmp_path / "ws"
+    root.mkdir()
+    (root / "issue.md").write_text("# t\n", encoding="utf-8")
+    svc = CaseService(repo_root=root, store_root=tmp_path / "cases")
+    case_id, _ = svc.open_issue(root / "issue.md")
+    _, eid = _submit_hyp_and_exp(svc, case_id)
+    try:
+        svc.submit(
+            [
+                DomainEvent(
+                    case_id=case_id,
+                    event_type=EventType.EXPERIMENT_APPROVED,
+                    timestamp=utc_now(),
+                    producer=AgentRole.ANALYST,
+                    payload={"experiment_id": eid, "authority": "Analyst"},
+                )
+            ]
+        )
+        assert False, "expected ValidationError"
+    except ValidationError as exc:
+        assert "Judge" in str(exc)
+
+
 def test_single_hyp_approved_experiment_schedules_verifier(tmp_path: Path):
     root = tmp_path / "ws"
     root.mkdir()
@@ -109,6 +202,9 @@ def test_single_hyp_approved_experiment_schedules_verifier(tmp_path: Path):
             )
         ]
     )
+    st = svc.engine.project(case_id)
+    assert st is not None
+    assert st.decision_state.get("adversary_challenged") is True
     svc.submit(
         [
             DomainEvent(

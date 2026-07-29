@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 from debugging_engine.domain.models import CaseState, DomainEvent
@@ -22,10 +21,37 @@ class JsonlEventStore:
     def events_path(self, case_id: str) -> Path:
         return self.case_dir(case_id) / "events.jsonl"
 
+    def lock_path(self, case_id: str) -> Path:
+        return self.case_dir(case_id) / "events.lock"
+
+    def _with_case_lock(self, case_id: str):
+        """Exclusive lock for writers on a case event log (best-effort cross-process)."""
+        import fcntl
+
+        class _Lock:
+            def __init__(self, path: Path) -> None:
+                self.path = path
+                self._fh = None
+
+            def __enter__(self):
+                self.path.parent.mkdir(parents=True, exist_ok=True)
+                self._fh = self.path.open("a+", encoding="utf-8")
+                fcntl.flock(self._fh.fileno(), fcntl.LOCK_EX)
+                return self
+
+            def __exit__(self, exc_type, exc, tb) -> None:
+                assert self._fh is not None
+                fcntl.flock(self._fh.fileno(), fcntl.LOCK_UN)
+                self._fh.close()
+                self._fh = None
+
+        return _Lock(self.lock_path(case_id))
+
     def append(self, event: DomainEvent) -> None:
         path = self.events_path(event.case_id)
-        with path.open("a", encoding="utf-8") as fh:
-            fh.write(event.model_dump_json() + "\n")
+        with self._with_case_lock(event.case_id):
+            with path.open("a", encoding="utf-8") as fh:
+                fh.write(event.model_dump_json() + "\n")
 
     def load_events(self, case_id: str) -> list[DomainEvent]:
         path = self.events_path(case_id)
@@ -62,24 +88,35 @@ class ProjectionEngine:
         return state
 
     def append_validated(self, event: DomainEvent) -> CaseState:
-        state = self.project(event.case_id)
-        try:
-            new_state = apply_event(state, event)
-        except ValidationError:
-            raise
-        self.store.append(event)
-        return new_state
+        with self.store._with_case_lock(event.case_id):
+            state = self.project(event.case_id)
+            try:
+                new_state = apply_event(state, event)
+            except ValidationError:
+                raise
+            path = self.store.events_path(event.case_id)
+            with path.open("a", encoding="utf-8") as fh:
+                fh.write(event.model_dump_json() + "\n")
+            return new_state
 
     def append_many(self, events: list[DomainEvent]) -> CaseState:
-        state: CaseState | None = None
-        if events:
-            state = self.project(events[0].case_id)
-        for event in events:
-            state = apply_event(state, event)
-            self.store.append(event)
-        if state is None:
+        if not events:
             raise ValidationError("No events to append")
-        return state
+        case_id = events[0].case_id
+        if any(e.case_id != case_id for e in events):
+            raise ValidationError("append_many requires a single case_id")
+        # Validate the full batch against an in-memory projection before any durable write.
+        with self.store._with_case_lock(case_id):
+            state = self.project(case_id)
+            trial = state
+            for event in events:
+                trial = apply_event(trial, event)
+            path = self.store.events_path(case_id)
+            with path.open("a", encoding="utf-8") as fh:
+                for event in events:
+                    fh.write(event.model_dump_json() + "\n")
+            assert trial is not None
+            return trial
 
 
 def dump_case_summary(state: CaseState) -> dict:

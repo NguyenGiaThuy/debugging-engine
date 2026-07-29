@@ -11,6 +11,10 @@ Coding agents (Cursor, Claude Code, Copilot, Codex, …) drive it through a CLI 
 - Experiments carry Verification Specs; evidence beats persuasion
 - Same kernel for every coding agent via project skills
 
+## Concurrency (current)
+
+The Judge returns **one** next Task at a time. You may **propose** many hypotheses/experiments in one `submit` batch, but approve/verify them sequentially on a single `case_id`. Spec §10 allows parallel experiment execution under constraints; that orchestration is **not** implemented yet. Event appends use a per-case file lock, and `append_many` validates the full batch before writing so mid-batch validation failures do not leave partial events.
+
 ## Install
 
 ```bash

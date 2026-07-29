@@ -255,7 +255,10 @@ def schedule_next_task(state: CaseState) -> Task:
         return Task(
             case_id=state.case_id,
             role=AgentRole.ANALYST,
-            objective="Propose hypotheses and at least one discriminating experiment for open unknowns.",
+            objective=(
+                "Propose hypotheses and ExperimentProposed events for open unknowns. "
+                "Do not approve, verify, or implement — call next after submit."
+            ),
             allowed_event_types=[
                 EventType.HYPOTHESIS_PROPOSED.value,
                 EventType.EXPERIMENT_PROPOSED.value,
@@ -265,6 +268,7 @@ def schedule_next_task(state: CaseState) -> Task:
                 "Declare assumptions explicitly.",
                 "Estimate information_gain and cost qualitatively.",
                 f"Active hypothesis budget per Unknown: {MAX_ACTIVE_HYPOTHESES_PER_UNKNOWN}.",
+                "Propose experiments as events only; running verify/patches requires Judge approval and role handoffs.",
             ],
         )
 
@@ -338,16 +342,22 @@ def schedule_next_task(state: CaseState) -> Task:
             ],
         )
 
-    # Dialectic before approving brand-new proposals when only one competing hypothesis exists.
+    # Dialectic before approving: Adversary must challenge when evidence is absent
+    # and no Adversary turn has run yet (single-hyp OR multi-hyp batch with proposals).
     competing = [
         h
         for h in state.hypotheses.values()
         if h.status not in {HypothesisStatus.REJECTED, HypothesisStatus.SUSPENDED}
     ]
-    if len(competing) < 2 and not state.evidence:
-        # Respect budget — if already at cap with one hyp, ask for experiment not more hyps
+    adversary_challenged = bool(state.decision_state.get("adversary_challenged"))
+    proposed_pending = [
+        e for e in state.experiments.values() if e.status == ExperimentStatus.PROPOSED
+    ]
+    if not state.evidence and not adversary_challenged and (
+        len(competing) < 2 or proposed_pending
+    ):
         unk_id = next(iter(state.unknowns))
-        if budget_remaining(state, unk_id) == 0:
+        if budget_remaining(state, unk_id) == 0 and len(competing) < 2:
             return Task(
                 case_id=state.case_id,
                 role=AgentRole.ANALYST,
@@ -358,7 +368,10 @@ def schedule_next_task(state: CaseState) -> Task:
         return Task(
             case_id=state.case_id,
             role=AgentRole.ADVERSARY,
-            objective="Challenge the current explanation; propose an alternative hypothesis and/or discriminating experiment.",
+            objective=(
+                "Challenge the current explanation before Judge approval; "
+                "propose an alternative hypothesis and/or discriminating experiment."
+            ),
             allowed_event_types=[
                 EventType.HYPOTHESIS_PROPOSED.value,
                 EventType.EXPERIMENT_PROPOSED.value,
@@ -371,6 +384,7 @@ def schedule_next_task(state: CaseState) -> Task:
                 "Announce this Adversary handoff in chat before challenging.",
                 "Objections must use a defined category.",
                 "Prefer experiments that discriminate.",
+                "Judge will not approve proposed experiments until this challenge runs.",
             ],
         )
 
