@@ -6,15 +6,13 @@ SMADW is architecture (an investigation kernel). Skills and IDE wrappers come la
 
 Minimal agent-agnostic Python CLI kernel: domain model, JSONL Event Log, Case State projection, Judge task handoff, in-engine Verifier, seeded `subject/` defects, stub e2e.
 
-## Phase 2 — Validate the architecture (current)
+## Phase 2 — Validate the architecture (done)
 
-Ask which architectural assumptions are wrong. Record findings as ADRs in [`decisions/`](decisions/).
+Stress scenarios + metrics (`smadw validate`), ADRs 0001–0004, surgical kernel policies.
 
-Harness: `smadw validate` runs stress scenarios (happy path, hypothesis flood, starvation, evidence bloat) and writes [`validation/phase2-report.md`](validation/phase2-report.md).
+## Phase 3 — Framework API (current)
 
-## Phase 3 — Framework
-
-Stabilize APIs so others can build on SMADW (`Case.Create`, projections, scheduling policies).
+Stable library surface: `Engine`, `Case`, pluggable `SchedulingPolicy`. See [`api.md`](api.md) and [ADR 0005](decisions/0005-public-framework-api.md).
 
 ## Phase 4 — Skills / interfaces
 

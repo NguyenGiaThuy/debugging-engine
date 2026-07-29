@@ -10,3 +10,4 @@ Each ADR records: Context, Decision, Rationale, Consequences, Alternatives consi
 | [0002](0002-hypothesis-budget.md) | Hypothesis budget per Unknown |
 | [0003](0003-scheduling-cycle-escalation.md) | Scheduling cycle escalation |
 | [0004](0004-judge-no-content-heuristics.md) | Judge must not use content heuristics |
+| [0005](0005-public-framework-api.md) | Public framework API (Engine + Case) |

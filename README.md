@@ -2,7 +2,7 @@
 
 Reference implementation of **SMADW v3.1** (State Machine–Driven Agentic Debugging Workflow).
 
-SMADW is an **investigation kernel**, not a chat agent. Coding agents (Cursor, Claude Code, Codex, etc.) drive it through a CLI contract. The engine owns Case State, the Event Log, validation, projections, and Judge scheduling. It does **not** embed an LLM.
+SMADW is an **investigation kernel**, not a chat agent. Coding agents (Cursor, Claude Code, Codex, etc.) drive it through a CLI or the Python library. The engine owns Case State, the Event Log, validation, projections, and Judge scheduling. It does **not** embed an LLM.
 
 ## Specification
 
@@ -13,39 +13,42 @@ The complete SMADW v3.1 RFC lives in [`docs/rfc/`](docs/rfc/).
 | I–VI | **Normative** |
 | VII | **Informative** |
 
-## Current milestone — Phase 2
+## Current milestone — Phase 3
 
-Phase 1 kernel is runnable. Phase 2 validates architectural assumptions via `smadw validate` and ADRs in [`docs/decisions/`](docs/decisions/). See [`docs/roadmap.md`](docs/roadmap.md).
+Stable framework API (`Engine`, `Case`, `SchedulingPolicy`). See [`docs/api.md`](docs/api.md) and [`docs/roadmap.md`](docs/roadmap.md).
 
-### Quick start
+### Library
+
+```python
+from smadw import Case, Engine, DomainEvent, EventType
+
+engine = Engine(repo_root=".")
+case = Case.open(engine, "subject/issues/001-cache-miss.md")
+task = case.next()
+# coding agent reasons outside SMADW, then:
+# case.submit([... DomainEvent ...])
+# case.verify(experiment_id)
+```
+
+### CLI
 
 ```bash
-python -m venv .venv
-source .venv/bin/activate
 pip install -e ".[dev]"
-
-# Stub-driven end-to-end (no coding agent / no API keys)
 smadw demo
-
-# Phase 2 architectural validation (metrics + ADRs)
 smadw validate
-
-# Or drive manually as a coding agent would:
 smadw open subject/issues/001-cache-miss.md
 smadw next <case-id>
 smadw submit <case-id> --events path/to/events.json
 smadw verify <case-id> <experiment-id>
-smadw status <case-id>
-smadw replay <case-id>
 ```
 
 ### Agent workflow
 
-1. `smadw open <issue>` — create Case + Unknown
-2. `smadw next <case-id>` — Judge returns the next Task
-3. Do reasoning / edits outside SMADW (your coding agent)
-4. `smadw submit <case-id> --events …` — append validated domain events
-5. `smadw verify <case-id> <experiment-id>` — run Verification Spec, record Evidence
+1. Open a case (library or CLI)
+2. `next` — Judge returns the next Task
+3. Reason / edit outside SMADW
+4. `submit` domain events
+5. `verify` experiments when scheduled
 6. Repeat until root cause accepted or escalate
 
 ## Layout
@@ -53,8 +56,9 @@ smadw replay <case-id>
 | Path | Role |
 | --- | --- |
 | `docs/rfc/` | SMADW specification |
+| `docs/api.md` | Public framework API |
 | `docs/roadmap.md` | Phases 1–4 (skill last) |
-| `docs/decisions/` | ADRs from architectural validation |
-| `src/smadw/` | Investigation kernel |
+| `docs/decisions/` | ADRs |
+| `src/smadw/` | Investigation kernel + public API |
 | `subject/` | System under investigation (seeded bugs) |
 | `.smadw/cases/` | Local Event Logs (gitignored) |

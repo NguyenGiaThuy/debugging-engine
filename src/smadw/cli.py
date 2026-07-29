@@ -8,10 +8,8 @@ import typer
 from rich import print_json
 from rich.console import Console
 
-from smadw.application.service import CaseService
+from smadw import Case, DomainEvent, Engine, ValidationError
 from smadw.application.metrics import write_phase2_report
-from smadw.domain.models import DomainEvent
-from smadw.domain.validation import ValidationError
 from smadw.runtime.stubs.demo import run_stub_investigation
 from smadw.runtime.stubs.scenarios import run_all_scenarios
 
@@ -20,11 +18,9 @@ console = Console()
 
 
 def repo_root() -> Path:
-    # Prefer cwd (project root when invoked from repo)
     cwd = Path.cwd()
     if (cwd / "subject").exists() and (cwd / "pyproject.toml").exists():
         return cwd
-    # Fallback: walk up from package
     here = Path(__file__).resolve()
     for parent in here.parents:
         if (parent / "pyproject.toml").exists() and (parent / "subject").exists():
@@ -32,8 +28,8 @@ def repo_root() -> Path:
     return cwd
 
 
-def service() -> CaseService:
-    return CaseService(repo_root())
+def engine() -> Engine:
+    return Engine(repo_root=repo_root())
 
 
 @app.command()
@@ -44,25 +40,25 @@ def open(
     path = issue if issue.is_absolute() else repo_root() / issue
     if not path.exists():
         raise typer.BadParameter(f"Issue not found: {path}")
-    case_id, events = service().open_issue(path)
-    console.print({"case_id": case_id, "events": [e.event_type for e in events]})
+    case = Case.open(engine(), path)
+    console.print({"case_id": case.case_id})
 
 
 @app.command("next")
 def next_task(case_id: str) -> None:
     """Ask the Judge for the next Task handoff."""
     try:
-        task = service().next_task(case_id)
+        case = Case.load(engine(), case_id)
+        print_json(data=case.next().model_dump(mode="json"))
     except KeyError:
         raise typer.Exit(code=1) from None
-    print_json(data=task)
 
 
 @app.command()
 def query(case_id: str, q: str = typer.Argument("summary")) -> None:
     """Query a Case State projection slice."""
     try:
-        print_json(data=service().query(case_id, q))
+        print_json(data=Case.load(engine(), case_id).query(q))
     except KeyError:
         raise typer.Exit(code=1) from None
 
@@ -81,7 +77,9 @@ def submit(
         item.setdefault("case_id", case_id)
         parsed.append(DomainEvent.model_validate(item))
     try:
-        print_json(data=service().submit(parsed))
+        print_json(data=Case.load(engine(), case_id).submit(parsed))
+    except KeyError:
+        raise typer.Exit(code=1) from None
     except ValidationError as exc:
         console.print(f"[red]ValidationFailed[/red]: {exc}")
         raise typer.Exit(code=2) from exc
@@ -91,7 +89,7 @@ def submit(
 def verify(case_id: str, experiment_id: str) -> None:
     """Run the Verification Spec for an experiment; record Evidence events."""
     try:
-        print_json(data=service().verify(case_id, experiment_id))
+        print_json(data=Case.load(engine(), case_id).verify(experiment_id))
     except (KeyError, ValueError, RuntimeError) as exc:
         console.print(f"[red]{exc}[/red]")
         raise typer.Exit(code=1) from exc
@@ -101,7 +99,7 @@ def verify(case_id: str, experiment_id: str) -> None:
 def status(case_id: str) -> None:
     """Show Case State summary."""
     try:
-        print_json(data=service().status(case_id))
+        print_json(data=Case.load(engine(), case_id).status())
     except KeyError:
         raise typer.Exit(code=1) from None
 
@@ -109,14 +107,17 @@ def status(case_id: str) -> None:
 @app.command()
 def log(case_id: str) -> None:
     """Print the Event Log."""
-    print_json(data=service().log(case_id))
+    try:
+        print_json(data=Case.load(engine(), case_id).log())
+    except KeyError:
+        raise typer.Exit(code=1) from None
 
 
 @app.command()
 def replay(case_id: str) -> None:
     """Rebuild Case State from the Event Log and print it."""
     try:
-        print_json(data=service().replay(case_id))
+        print_json(data=Case.load(engine(), case_id).replay())
     except KeyError:
         raise typer.Exit(code=1) from None
 
@@ -133,7 +134,6 @@ def demo(
     path = issue if issue else root / "subject" / "issues" / "001-cache-miss.md"
     if not path.is_absolute():
         path = root / path
-    # Restore buggy subject before demo so reruns are deterministic
     buggy = '''\
 """Tiny in-memory cache used as the SMADW investigation subject."""
 
@@ -159,7 +159,7 @@ class Cache:
 '''
     (root / "subject" / "cache.py").write_text(buggy, encoding="utf-8")
     try:
-        result = run_stub_investigation(service(), path)
+        result = run_stub_investigation(engine().service, path)
         print_json(data=result)
     finally:
         (root / "subject" / "cache.py").write_text(buggy, encoding="utf-8")
@@ -189,9 +189,9 @@ def validate(
     import tempfile
 
     with tempfile.TemporaryDirectory(prefix="smadw-validate-") as tmp:
-        svc = CaseService(root, store_root=Path(tmp) / "cases")
+        eng = Engine(repo_root=root, store_root=Path(tmp) / "cases")
         try:
-            rows = run_all_scenarios(svc, path)
+            rows = run_all_scenarios(eng.service, path)
         finally:
             (root / "subject" / "cache.py").write_text(buggy, encoding="utf-8")
 

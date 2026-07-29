@@ -4,11 +4,12 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 
-from smadw.application.judge import schedule_next_task
+from smadw.application.judge import Task
 from smadw.domain.models import AgentRole, DomainEvent, EventType, new_id
 from smadw.domain.validation import ValidationError
 from smadw.infrastructure.store import JsonlEventStore, ProjectionEngine, dump_case_summary, query_case
 from smadw.infrastructure.verify import run_verification
+from smadw.policies import DefaultSchedulingPolicy, SchedulingPolicy
 
 
 def utc_now() -> str:
@@ -38,10 +39,16 @@ PROGRESS_EVENT_TYPES = {
 
 
 class CaseService:
-    def __init__(self, repo_root: Path, store_root: Path | None = None) -> None:
+    def __init__(
+        self,
+        repo_root: Path,
+        store_root: Path | None = None,
+        policy: SchedulingPolicy | None = None,
+    ) -> None:
         self.repo_root = repo_root
         self.store = JsonlEventStore(store_root or default_store_root(repo_root))
         self.engine = ProjectionEngine(self.store)
+        self.policy: SchedulingPolicy = policy or DefaultSchedulingPolicy()
 
     def _meta_path(self, case_id: str) -> Path:
         return self.store.case_dir(case_id) / "scheduler_meta.json"
@@ -143,14 +150,18 @@ class CaseService:
         state = self._state_with_meta(case_id)
         if state is None:
             raise KeyError(case_id)
-        task = schedule_next_task(state)
+        task = self.policy.schedule(state)
         if not task.done:
             self._bump_cycles(case_id, progress=False)
             state = self._state_with_meta(case_id)
             assert state is not None
-            task = schedule_next_task(state)
+            task = self.policy.schedule(state)
         return task.model_dump(mode="json")
 
+    def next_task_model(self, case_id: str) -> Task:
+        """Same as next_task but returns a Task model."""
+        data = self.next_task(case_id)
+        return Task.model_validate(data)
     def query(self, case_id: str, q: str) -> dict:
         state = self._state_with_meta(case_id)
         if state is None:
