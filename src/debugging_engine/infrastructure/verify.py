@@ -29,6 +29,8 @@ def _resolve_command(command: list[str]) -> list[str]:
     if command[0] == "pytest":
         return [sys.executable, "-m", "pytest", *command[1:]]
     if command[0] == "python":
+        # Keep `python -m pytest` on the tool interpreter so uv-tool installs work
+        # once pytest is a package dependency.
         return [sys.executable, *command[1:]]
     return command
 

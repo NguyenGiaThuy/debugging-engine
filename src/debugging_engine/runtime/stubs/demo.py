@@ -280,6 +280,13 @@ def run_stub_investigation(service: CaseService, issue_path: Path) -> dict:
         steps.append("root_cause_accepted")
     else:
         task = service.next_task(case_id)
+        # Escalation may be offered on Judge or Analyst stall tasks.
+        if EventType.INVESTIGATION_ESCALATED.value not in task.get("allowed_event_types", []):
+            # Force a Judge/Analyst stall handoff that permits escalation.
+            for _ in range(8):
+                task = service.next_task(case_id)
+                if EventType.INVESTIGATION_ESCALATED.value in task.get("allowed_event_types", []):
+                    break
         service.submit(
             [
                 _event(
