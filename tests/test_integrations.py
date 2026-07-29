@@ -110,9 +110,37 @@ def test_uninstall_removes_matching_skills(tmp_path: Path):
     result = uninstall_agent("claude", tmp_path, force=False)
     assert result["manifest_removed"] is True
     assert not (tmp_path / ".claude/skills/debugging-engine-investigate").exists()
+    assert not (tmp_path / ".claude").exists()
     assert not (tmp_path / ".debugging-engine" / "integration.json").exists()
+    assert (tmp_path / ".debugging-engine").is_dir()  # cases/ kept
     assert (cases / "keep.txt").read_text(encoding="utf-8") == "case data\n"
     assert (tmp_path / ".gitignore").read_text(encoding="utf-8") == gitignore_before
+
+
+def test_uninstall_prunes_empty_agent_roots(tmp_path: Path):
+    scaffold_agent("codex", tmp_path, force=False)
+    uninstall_agent("codex", tmp_path, force=False)
+    assert not (tmp_path / ".agents").exists()
+    assert not (tmp_path / ".debugging-engine").exists()
+
+
+def test_uninstall_force_prunes_empty_agent_roots(tmp_path: Path):
+    scaffold_agent("codex", tmp_path, force=False)
+    skill = tmp_path / ".agents/skills/debugging-engine-investigate/SKILL.md"
+    skill.write_text("modified locally\n", encoding="utf-8")
+    uninstall_agent("codex", tmp_path, force=True)
+    assert not (tmp_path / ".agents").exists()
+
+
+def test_uninstall_preserves_nonempty_agent_root(tmp_path: Path):
+    scaffold_agent("codex", tmp_path, force=False)
+    other = tmp_path / ".agents/skills/other-skill"
+    other.mkdir(parents=True)
+    (other / "SKILL.md").write_text("# keep\n", encoding="utf-8")
+    uninstall_agent("codex", tmp_path, force=False)
+    assert (other / "SKILL.md").is_file()
+    assert (tmp_path / ".agents").is_dir()
+    assert not (tmp_path / ".agents/skills/debugging-engine-investigate").exists()
 
 
 def test_uninstall_preserves_modified_without_force(tmp_path: Path):
@@ -125,6 +153,8 @@ def test_uninstall_preserves_modified_without_force(tmp_path: Path):
     assert any(p.endswith("SKILL.md") for p in result["preserved"])
     # unmodified companion files removed
     assert not (tmp_path / ".cursor/skills/debugging-engine-investigate/reference.md").exists()
+    # agent root kept because modified skill remains
+    assert (tmp_path / ".cursor").is_dir()
 
 
 def test_uninstall_force_removes_modified(tmp_path: Path):
@@ -134,6 +164,7 @@ def test_uninstall_force_removes_modified(tmp_path: Path):
     result = uninstall_agent("copilot", tmp_path, force=True)
     assert result["force"] is True
     assert not (tmp_path / ".github/skills/debugging-engine-investigate").exists()
+    assert not (tmp_path / ".github").exists()
     assert result["preserved"] == []
 
 
@@ -216,6 +247,23 @@ def test_cli_all_uninstall(tmp_path: Path):
     assert set(payload["agents"]) == set(AGENTS)
     for key, spec in AGENTS.items():
         assert not (tmp_path / spec.skill_root / "debugging-engine-investigate").exists(), key
+        # empty agent skill roots pruned (first path segment: .claude, .agents, …)
+        agent_top = tmp_path / Path(spec.skill_root).parts[0]
+        assert not agent_top.exists(), key
+
+
+def test_cli_all_uninstall_force(tmp_path: Path):
+    runner.invoke(app, ["--agent", "all", "--path", str(tmp_path)])
+    for spec in AGENTS.values():
+        skill = tmp_path / spec.skill_root / "debugging-engine-investigate" / "SKILL.md"
+        skill.write_text("modified\n", encoding="utf-8")
+    result = runner.invoke(
+        app, ["--uninstall", "all", "--force", "--path", str(tmp_path)]
+    )
+    assert result.exit_code == 0, result.output
+    for key, spec in AGENTS.items():
+        agent_top = tmp_path / Path(spec.skill_root).parts[0]
+        assert not agent_top.exists(), key
 
 
 def test_cli_invalid_multi_agent(tmp_path: Path):

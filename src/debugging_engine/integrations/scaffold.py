@@ -135,8 +135,13 @@ def _rel(project_root: Path, path: Path) -> str:
 
 
 def _remove_empty_parents(path: Path, stop_at: Path) -> None:
-    """Remove empty directories from path up to (but not including) stop_at."""
-    current = path
+    """Remove empty directories from ``path`` up to (but not including) ``stop_at``.
+
+    Typically ``stop_at`` is the project root so empty ``skills/`` and agent
+    roots (``.agents``, ``.claude``, …) are removed when fully empty.
+    """
+    stop_at = stop_at.resolve()
+    current = (path if path.is_dir() else path.parent).resolve()
     while current != stop_at and current.is_dir():
         try:
             next(current.iterdir())
@@ -158,6 +163,7 @@ def uninstall_agent(
 
     Without ``force``, only deletes files byte-identical to packaged templates.
     With ``force``, deletes entire ``debugging-engine-*`` skill directories.
+    Empty skill roots and parent agent dirs are removed when left empty.
     """
     agent = get_agent(agent_key)
     project_root = project_root.resolve()
@@ -186,6 +192,7 @@ def uninstall_agent(
             elif dest.is_file():
                 dest.unlink()
                 removed.append(_rel(project_root, dest))
+            _remove_empty_parents(dest, project_root)
             continue
 
         if not src.is_dir():
@@ -210,7 +217,7 @@ def uninstall_agent(
                     if rel_s not in preserved and rel_s not in removed:
                         preserved.append(rel_s)
 
-        _remove_empty_parents(dest, skill_root)
+        _remove_empty_parents(dest, project_root)
 
     manifest_path = project_root / ".debugging-engine" / "integration.json"
     manifest_removed = False
@@ -227,6 +234,7 @@ def uninstall_agent(
             manifest_path.unlink()
             manifest_removed = True
             removed.append(_rel(project_root, manifest_path))
+            _remove_empty_parents(manifest_path.parent, project_root)
 
     return {
         "agent": agent.key,

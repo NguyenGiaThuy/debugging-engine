@@ -63,6 +63,8 @@ debugging-engine --uninstall all --force
 debugging-engine uninstall-cli    # uv tool uninstall debugging-engine
 ```
 
+Empty agent skill directories (for example `.agents/` or `.claude/skills/`) are removed when uninstall leaves them empty.
+
 Skills:
 
 - `debugging-engine-investigate` — general debugging
