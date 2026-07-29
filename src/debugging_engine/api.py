@@ -5,11 +5,11 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Sequence
 
-from smadw.application.judge import Task
-from smadw.application.metrics import CaseMetrics, compute_case_metrics
-from smadw.application.service import CaseService
-from smadw.domain.models import DomainEvent
-from smadw.policies import DefaultSchedulingPolicy, SchedulingPolicy
+from debugging_engine.application.judge import Task
+from debugging_engine.application.metrics import CaseMetrics, compute_case_metrics
+from debugging_engine.application.service import CaseService
+from debugging_engine.domain.models import DomainEvent
+from debugging_engine.policies import DefaultSchedulingPolicy, SchedulingPolicy
 
 
 class Engine:

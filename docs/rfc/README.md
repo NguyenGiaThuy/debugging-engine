@@ -1,13 +1,13 @@
-# SMADW v3.1 — RFC Index
+# Debugging Engine v3.1 — RFC Index
 
 **Version:** 3.1  
-**Project:** [reasoning-engine](../../README.md)
+**Project:** [debugging-engine](../../README.md)
 
 ## Status legend
 
 | Status | Meaning |
 | --- | --- |
-| **Normative** | Required for SMADW compliance. Implementations MUST satisfy these requirements. |
+| **Normative** | Required for Debugging Engine compliance. Implementations MUST satisfy these requirements. |
 | **Informative** | Guidance and examples. Implementations MAY differ provided normative parts are satisfied. |
 
 ## Precedence
@@ -30,4 +30,4 @@
 
 ## Reading order
 
-Parts I–VI define **what SMADW is**. Part VII demonstrates **how SMADW can be built**. Readers implementing a compliant system should treat Parts I–VI as the contract and Part VII as one possible realization.
+Parts I–VI define **what Debugging Engine is**. Part VII demonstrates **how Debugging Engine can be built**. Readers implementing a compliant system should treat Parts I–VI as the contract and Part VII as one possible realization.

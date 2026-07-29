@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from smadw.domain.models import ExperimentStatus, HypothesisStatus, UnknownStatus
+from debugging_engine.domain.models import ExperimentStatus, HypothesisStatus, UnknownStatus
 
 UNKNOWN_TRANSITIONS: dict[UnknownStatus, set[UnknownStatus]] = {
     UnknownStatus.DISCOVERED: {UnknownStatus.ACTIVE, UnknownStatus.ABANDONED},

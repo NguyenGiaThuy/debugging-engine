@@ -1,4 +1,4 @@
-# SMADW v3.1
+# Debugging Engine v3.1
 
 # Part V — Execution, Verification & Learning
 
@@ -134,7 +134,7 @@ No silent failures exist.
 
 # 5. Experiment Classes
 
-SMADW recognizes two execution pipelines.
+Debugging Engine recognizes two execution pipelines.
 
 ---
 
@@ -273,7 +273,7 @@ Evidence never contains explanations.
 
 Not all evidence has equal strength.
 
-Instead of numerical confidence, SMADW evaluates evidence along qualitative dimensions.
+Instead of numerical confidence, Debugging Engine evaluates evidence along qualitative dimensions.
 
 | Attribute       | Description                                        |
 | --------------- | -------------------------------------------------- |
@@ -429,7 +429,7 @@ Deprecated knowledge remains historically available but SHOULD NOT influence new
 
 # 15. Organizational Memory
 
-SMADW distinguishes between three classes of knowledge.
+Debugging Engine distinguishes between three classes of knowledge.
 
 | Type                  | Purpose                                                    |
 | --------------------- | ---------------------------------------------------------- |
@@ -476,6 +476,6 @@ Execution therefore becomes an auditable, reproducible process rather than an ad
 
 1. **Define the Event Envelope.** The Event Bus currently transports domain events, but Part VI should specify a canonical event envelope (e.g., `event_id`, `case_id`, `event_type`, `timestamp`, `producer`, `schema_version`, `payload`, `correlation_id`, `causation_id`). This ensures interoperability between implementations.
 
-2. **Formalize Extension Points.** While SMADW intentionally defines seven architectural agents, implementations will inevitably integrate different LLMs, verification tools, CI/CD systems, tracing platforms, and knowledge stores. Part VI should explicitly define extension interfaces so that implementations can substitute infrastructure without altering the architectural contracts. This keeps SMADW implementation-agnostic while preserving interoperability.
+2. **Formalize Extension Points.** While Debugging Engine intentionally defines seven architectural agents, implementations will inevitably integrate different LLMs, verification tools, CI/CD systems, tracing platforms, and knowledge stores. Part VI should explicitly define extension interfaces so that implementations can substitute infrastructure without altering the architectural contracts. This keeps Debugging Engine implementation-agnostic while preserving interoperability.
 
 These additions will allow Part VI to function as a true implementation specification rather than merely a conceptual reference.

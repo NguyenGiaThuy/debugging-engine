@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from smadw.domain.models import (
+from debugging_engine.domain.models import (
     CaseState,
     DomainEvent,
     EventType,
@@ -18,12 +18,12 @@ from smadw.domain.models import (
     UnknownStatus,
     VerificationSpec,
 )
-from smadw.domain.transitions import (
+from debugging_engine.domain.transitions import (
     can_promote_hypothesis,
     can_transition_experiment,
     can_transition_unknown,
 )
-from smadw.domain.policies import (
+from debugging_engine.domain.policies import (
     INACTIVE_HYPOTHESIS_STATUSES,
     MAX_ACTIVE_HYPOTHESES_PER_UNKNOWN,
 )

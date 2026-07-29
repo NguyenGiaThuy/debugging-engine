@@ -1,4 +1,4 @@
-# SMADW v3.1
+# Debugging Engine v3.1
 
 # Part III — Investigation Model
 
@@ -10,7 +10,7 @@
 
 # 1. Overview
 
-Every SMADW investigation is represented as a **Case State**.
+Every Debugging Engine investigation is represented as a **Case State**.
 
 The Case State is the authoritative representation of everything the system knows about an investigation at a given point in time.
 
@@ -106,7 +106,7 @@ Nothing edits history.
 
 # 4. Investigation Objects
 
-SMADW defines exactly five canonical first-class investigation objects, plus the Case that contains them.
+Debugging Engine defines exactly five canonical first-class investigation objects, plus the Case that contains them.
 
 ```
 Unknown
@@ -256,7 +256,7 @@ GC pauses
 
 All coexist.
 
-SMADW never assumes exclusivity.
+Debugging Engine never assumes exclusivity.
 
 ---
 
@@ -346,7 +346,7 @@ Estimated information gain is a qualitative planning heuristic. Its levels and u
 
 ## Experiment Types
 
-SMADW recognizes two categories.
+Debugging Engine recognizes two categories.
 
 ### Observational
 

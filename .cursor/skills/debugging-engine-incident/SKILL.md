@@ -1,16 +1,16 @@
 ---
-name: smadw-incident
+name: debugging-engine-incident
 description: >-
-  Investigates production incidents and outages using the SMADW investigation
+  Investigates production incidents and outages using the Debugging Engine investigation
   kernel (Case State, experiments, evidence). Use when the user reports an
   incident, outage, production failure, SEV, or asks for incident root-cause
-  analysis with SMADW.
+  analysis with Debugging Engine.
 disable-model-invocation: true
 ---
 
-# SMADW Incident
+# Debugging Engine Incident
 
-Same kernel as [smadw-investigate](../smadw-investigate/SKILL.md). Specialize the Unknown and experiments for **production incidents**.
+Same kernel as [debugging-engine-investigate](../debugging-engine-investigate/SKILL.md). Specialize the Unknown and experiments for **production incidents**.
 
 ## Extra guidance
 
@@ -24,4 +24,4 @@ Same kernel as [smadw-investigate](../smadw-investigate/SKILL.md). Specialize th
 
 Follow the investigate skill loop: `open` → `next` → work → `submit`/`verify` → resolve or escalate.
 
-Event schemas: [../smadw-investigate/reference.md](../smadw-investigate/reference.md).
+Event schemas: [../debugging-engine-investigate/reference.md](../debugging-engine-investigate/reference.md).

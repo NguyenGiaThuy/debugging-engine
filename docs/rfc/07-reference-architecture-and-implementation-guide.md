@@ -1,4 +1,4 @@
-# SMADW v3.1
+# Debugging Engine v3.1
 
 # Part VII — Reference Architecture & Implementation Guide
 
@@ -15,7 +15,7 @@ The reference implementation has four goals.
 1. Demonstrate that the specification is implementable.
 2. Provide a baseline architecture for future implementations.
 3. Validate that the specification contains no missing concepts.
-4. Serve as a testbed for future versions of SMADW.
+4. Serve as a testbed for future versions of Debugging Engine.
 
 It is **not** intended to be the only implementation.
 
@@ -59,7 +59,7 @@ No agent communicates directly with another agent.
 # 3. Recommended Repository Layout
 
 ```text
-smadw/
+debugging-engine/
 
 ├── specification/
 │   ├── part1-philosophy.md
@@ -97,7 +97,7 @@ smadw/
 
 The repository organization mirrors the conceptual architecture.
 
-> **Note:** This repository (`reasoning-engine`) stores the specification under `docs/rfc/` rather than `smadw/specification/`. The layout above remains an informative reference for implementations that prefer a different tree.
+> **Note:** This repository (`debugging-engine`) stores the specification under `docs/rfc/` rather than `debugging-engine/specification/`. The layout above remains an informative reference for implementations that prefer a different tree.
 
 ---
 
@@ -396,7 +396,7 @@ Replay testing is particularly important because it verifies that the Event Log 
 
 # 10. Evolution Strategy
 
-SMADW is intended to evolve without breaking existing investigations.
+Debugging Engine is intended to evolve without breaking existing investigations.
 
 Recommended approach:
 
@@ -411,7 +411,7 @@ This allows long-lived investigation histories to remain valid across versions.
 
 # 11. Known Limitations
 
-SMADW intentionally leaves several areas open for future work.
+Debugging Engine intentionally leaves several areas open for future work.
 
 * Multi-case investigations that share evidence.
 * Distributed orchestration across multiple organizations.
@@ -452,11 +452,11 @@ All future changes to the normative specification should be documented as ADRs. 
 * Consequences
 * Alternatives Considered
 
-This provides a transparent governance process for evolving SMADW while preserving backward compatibility.
+This provides a transparent governance process for evolving Debugging Engine while preserving backward compatibility.
 
 ---
 
-# Final Judge Review — SMADW v3.1
+# Final Judge Review — Debugging Engine v3.1
 
 **Status:** ✅ **Accepted for Publication**
 
@@ -477,4 +477,4 @@ Although the specification is publication-ready, several areas would benefit fro
 4. **Distributed Investigations** — Extend the model to investigations spanning multiple repositories, services, or organizations.
 5. **Reference Implementation** — Validate the specification by implementing the complete architecture and documenting lessons learned through ADRs.
 
-With these recommendations, SMADW has evolved from an architectural concept into a specification that could realistically serve as the blueprint for a production-grade investigation platform and a basis for independent implementations. The next milestone is no longer further philosophical refinement—it is building and validating the reference implementation against real debugging scenarios.
+With these recommendations, Debugging Engine has evolved from an architectural concept into a specification that could realistically serve as the blueprint for a production-grade investigation platform and a basis for independent implementations. The next milestone is no longer further philosophical refinement—it is building and validating the reference implementation against real debugging scenarios.

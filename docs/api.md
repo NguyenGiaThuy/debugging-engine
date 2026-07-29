@@ -1,8 +1,8 @@
-# SMADW public API
+# Debugging Engine public API
 
-**Status:** Stable for Phase 3 (package `0.3.0`). See [ADR 0005](decisions/0005-public-framework-api.md).
+**Status:** Stable for Phase 3 (package `0.4.0`). See [ADR 0005](decisions/0005-public-framework-api.md).
 
-SMADW is an **agent-agnostic investigation kernel**. This API does **not** run Analyst/Adversary/Implementer LLMs. Coding agents call these methods (or the CLI) to advance Case State.
+Debugging Engine is an **agent-agnostic investigation kernel**. This API does **not** run Analyst/Adversary/Implementer LLMs. Coding agents call these methods (or the CLI) to advance Case State.
 
 ## Install
 
@@ -13,7 +13,7 @@ pip install -e ".[dev]"
 ## Quick start
 
 ```python
-from smadw import Case, Engine, DomainEvent, EventType, AgentRole
+from debugging_engine import Case, Engine, DomainEvent, EventType, AgentRole
 from datetime import datetime, timezone
 
 engine = Engine(repo_root=".")
@@ -33,14 +33,14 @@ print(case.status()["status"])
 
 | Symbol | Module | Purpose |
 | --- | --- | --- |
-| `Engine` | `smadw` | Repo/store + optional `SchedulingPolicy` |
-| `Case` | `smadw` | Bound investigation (`open`, `load`, `next`, `submit`, `verify`, …) |
-| `Task` | `smadw` | Judge handoff (role, projection, allowed events) |
-| `DomainEvent` / `EventType` | `smadw` | Event envelope types |
-| `ValidationError` | `smadw` | Illegal state transitions / budgets |
-| `SchedulingPolicy` | `smadw` / `smadw.policies` | Protocol for custom Judges |
-| `DefaultSchedulingPolicy` | `smadw.policies` | Built-in Part IV Judge |
-| `schedule_next_task` | `smadw` | Function form of the default policy |
+| `Engine` | `debugging-engine` | Repo/store + optional `SchedulingPolicy` |
+| `Case` | `debugging-engine` | Bound investigation (`open`, `load`, `next`, `submit`, `verify`, …) |
+| `Task` | `debugging-engine` | Judge handoff (role, projection, allowed events) |
+| `DomainEvent` / `EventType` | `debugging-engine` | Event envelope types |
+| `ValidationError` | `debugging-engine` | Illegal state transitions / budgets |
+| `SchedulingPolicy` | `debugging-engine` / `debugging_engine.policies` | Protocol for custom Judges |
+| `DefaultSchedulingPolicy` | `debugging_engine.policies` | Built-in Part IV Judge |
+| `schedule_next_task` | `debugging-engine` | Function form of the default policy |
 
 ## Engine
 
@@ -49,7 +49,7 @@ Engine(repo_root=".", store_root=None, policy=None)
 ```
 
 - `repo_root` — workspace containing `subject/` (or any project under investigation)
-- `store_root` — Event Log root (default `<repo>/.smadw/cases`)
+- `store_root` — Event Log root (default `<repo>/.debugging-engine/cases`)
 - `policy` — `SchedulingPolicy` used by `Case.next()`
 
 ## Case
@@ -68,8 +68,8 @@ Engine(repo_root=".", store_root=None, policy=None)
 ## Custom scheduling policy
 
 ```python
-from smadw import Case, Engine, Task
-from smadw.domain.models import AgentRole, CaseState, InvestigationStatus
+from debugging_engine import Case, Engine, Task
+from debugging_engine.domain.models import AgentRole, CaseState, InvestigationStatus
 
 class AlwaysEscalate:
     def schedule(self, state: CaseState) -> Task:
@@ -89,8 +89,8 @@ print(case.next().objective)
 
 ## Unstable internals
 
-Do not import from `smadw.application`, `smadw.infrastructure`, or `smadw.runtime` in application code — they may change without a major version bump.
+Do not import from `debugging_engine.application`, `debugging_engine.infrastructure`, or `debugging_engine.runtime` in application code — they may change without a major version bump.
 
 ## CLI
 
-The `smadw` CLI is a thin wrapper over this API (`open`, `next`, `submit`, `verify`, `demo`, `validate`).
+The `debugging-engine` CLI is a thin wrapper over this API (`open`, `next`, `submit`, `verify`, `demo`, `validate`).

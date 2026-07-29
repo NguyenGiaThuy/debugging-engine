@@ -5,7 +5,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from smadw.domain.models import (
+from debugging_engine.domain.models import (
     AgentRole,
     CaseState,
     EventType,
@@ -15,7 +15,7 @@ from smadw.domain.models import (
     InformationGain,
     InvestigationStatus,
 )
-from smadw.domain.policies import (
+from debugging_engine.domain.policies import (
     INACTIVE_HYPOTHESIS_STATUSES,
     MAX_ACTIVE_HYPOTHESES_PER_UNKNOWN,
     MAX_PROJECTION_FIELD_CHARS,
@@ -345,7 +345,7 @@ def schedule_next_task(state: CaseState) -> Task:
         return Task(
             case_id=state.case_id,
             role=AgentRole.VERIFIER,
-            objective=f"Run verification for experiment '{exp.title}' ({exp.id}) via `smadw verify`.",
+            objective=f"Run verification for experiment '{exp.title}' ({exp.id}) via `debugging-engine verify`.",
             allowed_event_types=[
                 EventType.EXPERIMENT_STARTED.value,
                 EventType.EVIDENCE_RECORDED.value,
@@ -363,7 +363,7 @@ def schedule_next_task(state: CaseState) -> Task:
                 },
                 "metrics": _metrics_summary(state),
             },
-            hints=["Prefer `smadw verify <case-id> <experiment-id>` rather than hand-writing evidence."],
+            hints=["Prefer `debugging-engine verify <case-id> <experiment-id>` rather than hand-writing evidence."],
         )
 
     completed = [e for e in state.experiments.values() if e.status == ExperimentStatus.COMPLETED]

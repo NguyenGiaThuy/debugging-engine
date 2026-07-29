@@ -1,16 +1,16 @@
 ---
-name: smadw-performance
+name: debugging-engine-performance
 description: >-
   Finds performance bottlenecks (latency, throughput, memory, CPU) using the
-  SMADW investigation kernel with measurement-first experiments. Use when the
+  Debugging Engine investigation kernel with measurement-first experiments. Use when the
   user asks about slow endpoints, latency regressions, memory growth, or
-  performance root cause with SMADW.
+  performance root cause with Debugging Engine.
 disable-model-invocation: true
 ---
 
-# SMADW Performance
+# Debugging Engine Performance
 
-Same kernel as [smadw-investigate](../smadw-investigate/SKILL.md). Specialize for **performance unknowns**.
+Same kernel as [debugging-engine-investigate](../debugging-engine-investigate/SKILL.md). Specialize for **performance unknowns**.
 
 ## Extra guidance
 
@@ -24,4 +24,4 @@ Same kernel as [smadw-investigate](../smadw-investigate/SKILL.md). Specialize fo
 
 Follow the investigate skill loop: `open` → `next` → measure → `submit`/`verify` → resolve or escalate.
 
-Event schemas: [../smadw-investigate/reference.md](../smadw-investigate/reference.md).
+Event schemas: [../debugging-engine-investigate/reference.md](../debugging-engine-investigate/reference.md).

@@ -8,12 +8,12 @@ import typer
 from rich import print_json
 from rich.console import Console
 
-from smadw import Case, DomainEvent, Engine, ValidationError
-from smadw.application.metrics import write_phase2_report
-from smadw.runtime.stubs.demo import run_stub_investigation
-from smadw.runtime.stubs.scenarios import run_all_scenarios
+from debugging_engine import Case, DomainEvent, Engine, ValidationError
+from debugging_engine.application.metrics import write_phase2_report
+from debugging_engine.runtime.stubs.demo import run_stub_investigation
+from debugging_engine.runtime.stubs.scenarios import run_all_scenarios
 
-app = typer.Typer(help="SMADW investigation kernel — agent-agnostic CLI", no_args_is_help=True)
+app = typer.Typer(help="Debugging Engine investigation kernel — agent-agnostic CLI", no_args_is_help=True)
 console = Console()
 
 
@@ -135,7 +135,7 @@ def demo(
     if not path.is_absolute():
         path = root / path
     buggy = '''\
-"""Tiny in-memory cache used as the SMADW investigation subject."""
+"""Tiny in-memory cache used as the Debugging Engine investigation subject."""
 
 
 def normalize_key(key: str) -> str:
@@ -188,7 +188,7 @@ def validate(
     buggy = (root / "subject" / "cache.py").read_text(encoding="utf-8")
     import tempfile
 
-    with tempfile.TemporaryDirectory(prefix="smadw-validate-") as tmp:
+    with tempfile.TemporaryDirectory(prefix="debugging-engine-validate-") as tmp:
         eng = Engine(repo_root=root, store_root=Path(tmp) / "cases")
         try:
             rows = run_all_scenarios(eng.service, path)

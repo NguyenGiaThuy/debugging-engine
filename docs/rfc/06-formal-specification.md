@@ -1,10 +1,10 @@
-# SMADW v3.1
+# Debugging Engine v3.1
 
 # Part VI — Formal Specification
 
 > **Status:** Normative
 >
-> This chapter defines the canonical schemas, contracts, protocols, state machines, validation rules, and extension interfaces of SMADW. Any implementation claiming SMADW compliance MUST satisfy the requirements in this chapter.
+> This chapter defines the canonical schemas, contracts, protocols, state machines, validation rules, and extension interfaces of Debugging Engine. Any implementation claiming Debugging Engine compliance MUST satisfy the requirements in this chapter.
 
 ---
 
@@ -226,7 +226,7 @@ It never silently modifies state.
 
 # 7. Domain Events
 
-SMADW defines a fixed vocabulary of domain events.
+Debugging Engine defines a fixed vocabulary of domain events.
 
 ### Investigation
 
@@ -419,7 +419,7 @@ Not exceptions.
 
 # 13. Extension Points
 
-SMADW intentionally separates architecture from implementation.
+Debugging Engine intentionally separates architecture from implementation.
 
 The following interfaces are replaceable.
 
@@ -485,7 +485,7 @@ Examples
 
 # 14. Compliance Levels
 
-To encourage adoption, SMADW defines three compliance tiers.
+To encourage adoption, Debugging Engine defines three compliance tiers.
 
 ### Level 1 — Core Compliance
 
@@ -526,7 +526,7 @@ Adds:
 * Extension interfaces
 * Complete auditability
 
-Represents full SMADW v3.1 conformance.
+Represents full Debugging Engine v3.1 conformance.
 
 ---
 
@@ -582,4 +582,4 @@ These capabilities serve as executable proof that the specification is complete 
 
 **Status:** ✅ Approved with one strategic recommendation.
 
-The formal specification successfully separates architecture from implementation and provides a stable interoperability contract. However, the specification would benefit from one final chapter that is not normative but highly practical: a **Reference Architecture and Implementation Guide**. This chapter should illustrate how the abstract concepts map onto a concrete system—repositories, services, databases, event buses, APIs, deployment topology, and an end-to-end investigation example. By keeping that material informative rather than normative, SMADW remains technology-agnostic while giving implementers a clear path from specification to working software. That becomes the role of Part VII, completing the transition from architectural standard to implementable ecosystem.
+The formal specification successfully separates architecture from implementation and provides a stable interoperability contract. However, the specification would benefit from one final chapter that is not normative but highly practical: a **Reference Architecture and Implementation Guide**. This chapter should illustrate how the abstract concepts map onto a concrete system—repositories, services, databases, event buses, APIs, deployment topology, and an end-to-end investigation example. By keeping that material informative rather than normative, Debugging Engine remains technology-agnostic while giving implementers a clear path from specification to working software. That becomes the role of Part VII, completing the transition from architectural standard to implementable ecosystem.

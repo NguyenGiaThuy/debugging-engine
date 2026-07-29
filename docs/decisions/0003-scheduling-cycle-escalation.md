@@ -7,7 +7,7 @@ Part IV requires starvation recovery and prohibits waiting indefinitely. Phase 1
 ## Decision
 
 1. Persist `scheduling_cycles`, `stall_cycles`, and `last_progress_revision` in a per-case scheduler meta sidecar (not domain events), merged into Case State views for the Judge.
-2. `smadw next` without progress increments `stall_cycles`.
+2. `debugging-engine next` without progress increments `stall_cycles`.
 3. Progress events / successful verify reset `stall_cycles`.
 4. When `stall_cycles >= STALL_CYCLES_BEFORE_ESCALATION` (5), the Judge’s next task requires escalation or a productive experiment proposal.
 

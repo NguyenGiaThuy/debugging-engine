@@ -4,11 +4,11 @@ from __future__ import annotations
 
 from typing import Protocol, runtime_checkable
 
-from smadw.application.judge import Task, schedule_next_task
-from smadw.domain.models import CaseState
+from debugging_engine.application.judge import Task, schedule_next_task
+from debugging_engine.domain.models import CaseState
 
 # Re-export Phase 2 policy constants for convenience
-from smadw.domain.policies import (  # noqa: F401
+from debugging_engine.domain.policies import (  # noqa: F401
     INACTIVE_HYPOTHESIS_STATUSES,
     MAX_ACTIVE_HYPOTHESES_PER_UNKNOWN,
     MAX_OBSERVATION_CHARS,

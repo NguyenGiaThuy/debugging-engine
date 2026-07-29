@@ -1,4 +1,4 @@
-"""Tiny in-memory cache used as the SMADW investigation subject."""
+"""Tiny in-memory cache used as the Debugging Engine investigation subject."""
 
 
 def normalize_key(key: str) -> str:

@@ -4,9 +4,9 @@ from pathlib import Path
 
 import pytest
 
-from smadw.application.judge import schedule_next_task
-from smadw.application.service import CaseService
-from smadw.domain.models import (
+from debugging_engine.application.judge import schedule_next_task
+from debugging_engine.application.service import CaseService
+from debugging_engine.domain.models import (
     AgentRole,
     DomainEvent,
     EventType,
@@ -18,14 +18,14 @@ from smadw.domain.models import (
     InvestigationStatus,
     new_id,
 )
-from smadw.domain.policies import (
+from debugging_engine.domain.policies import (
     MAX_ACTIVE_HYPOTHESES_PER_UNKNOWN,
     MAX_OBSERVATION_CHARS,
     STALL_CYCLES_BEFORE_ESCALATION,
 )
-from smadw.domain.validation import ValidationError, apply_event
-from smadw.infrastructure.verify import truncate_observation
-from smadw.runtime.stubs.scenarios import (
+from debugging_engine.domain.validation import ValidationError, apply_event
+from debugging_engine.infrastructure.verify import truncate_observation
+from debugging_engine.runtime.stubs.scenarios import (
     scenario_evidence_bloat,
     scenario_happy_cache,
     scenario_hypothesis_flood,

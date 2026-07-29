@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from smadw import (
+from debugging_engine import (
     Case,
     DomainEvent,
     Engine,
@@ -13,12 +13,12 @@ from smadw import (
     __version__,
     schedule_next_task,
 )
-from smadw.domain.models import AgentRole, CaseState, new_id
-from smadw.policies import DefaultSchedulingPolicy
+from debugging_engine.domain.models import AgentRole, CaseState, new_id
+from debugging_engine.policies import DefaultSchedulingPolicy
 
 
 def test_public_exports():
-    assert __version__ == "0.3.0"
+    assert __version__ == "0.4.0"
     assert callable(schedule_next_task)
     assert issubclass(DefaultSchedulingPolicy, object)
 

@@ -4,13 +4,13 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from smadw.application.judge import schedule_next_task
-from smadw.application.service import CaseService, utc_now
-from smadw.domain.models import AgentRole, DomainEvent, EventType, HypothesisStatus, new_id
+from debugging_engine.application.judge import schedule_next_task
+from debugging_engine.application.service import CaseService, utc_now
+from debugging_engine.domain.models import AgentRole, DomainEvent, EventType, HypothesisStatus, new_id
 
 
 FIXED_CACHE = '''\
-"""Tiny in-memory cache used as the SMADW investigation subject."""
+"""Tiny in-memory cache used as the Debugging Engine investigation subject."""
 
 
 def normalize_key(key: str) -> str:

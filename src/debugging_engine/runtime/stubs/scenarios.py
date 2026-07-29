@@ -5,16 +5,16 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Callable
 
-from smadw.application.metrics import CaseMetrics, compute_case_metrics
-from smadw.application.service import CaseService, utc_now
-from smadw.domain.models import AgentRole, DomainEvent, EventType, new_id
-from smadw.domain.policies import (
+from debugging_engine.application.metrics import CaseMetrics, compute_case_metrics
+from debugging_engine.application.service import CaseService, utc_now
+from debugging_engine.domain.models import AgentRole, DomainEvent, EventType, new_id
+from debugging_engine.domain.policies import (
     MAX_ACTIVE_HYPOTHESES_PER_UNKNOWN,
     MAX_OBSERVATION_CHARS,
     STALL_CYCLES_BEFORE_ESCALATION,
 )
-from smadw.domain.validation import ValidationError
-from smadw.runtime.stubs.demo import run_stub_investigation
+from debugging_engine.domain.validation import ValidationError
+from debugging_engine.runtime.stubs.demo import run_stub_investigation
 
 
 def _ev(case_id: str, et: EventType, producer: str, payload: dict) -> DomainEvent:

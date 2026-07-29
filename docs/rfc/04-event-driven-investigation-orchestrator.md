@@ -1,10 +1,10 @@
-# SMADW v3.1
+# Debugging Engine v3.1
 
 # Part IV — Event-Driven Investigation Orchestrator
 
 > **Status:** Normative
 >
-> This chapter defines how investigations evolve over time. Unlike traditional debugging workflows, SMADW is not iteration-driven or prompt-driven. It is an event-driven orchestration system in which investigation state changes only in response to explicit domain events.
+> This chapter defines how investigations evolve over time. Unlike traditional debugging workflows, Debugging Engine is not iteration-driven or prompt-driven. It is an event-driven orchestration system in which investigation state changes only in response to explicit domain events.
 
 ---
 
@@ -52,7 +52,7 @@ Think
 Reply
 ```
 
-SMADW executes through domain events.
+Debugging Engine executes through domain events.
 
 ```text
 Event
@@ -215,7 +215,7 @@ The Judge never evaluates technical correctness.
 
 Earlier versions attempted numerical confidence.
 
-SMADW v3.1 replaces this with qualitative Information Gain.
+Debugging Engine v3.1 replaces this with qualitative Information Gain.
 
 Information Gain estimates how much uncertainty an experiment could remove.
 
@@ -464,6 +464,6 @@ The orchestrator therefore acts less like a conversational coordinator and more 
 
 **Status:** ✅ Approved with one architectural recommendation.
 
-This chapter successfully transforms SMADW from an iterative prompt workflow into an event-driven orchestration architecture. The separation between technical reasoning and orchestration is now clear, and the Experiment Dependency Graph resolves several shortcomings identified in the v3.0 review.
+This chapter successfully transforms Debugging Engine from an iterative prompt workflow into an event-driven orchestration architecture. The separation between technical reasoning and orchestration is now clear, and the Experiment Dependency Graph resolves several shortcomings identified in the v3.0 review.
 
 One refinement is recommended for Part V: the orchestrator currently reacts to events after they occur, but some events (such as long-running experiments or human responses) are inherently asynchronous. Rather than having the orchestrator poll for completion, Part V should define an **Event Bus** as the transport layer through which agents publish domain events. The Investigation Orchestrator would subscribe to these events instead of actively monitoring every experiment. This preserves the event-driven philosophy end-to-end and cleanly separates orchestration logic from execution infrastructure. If adopted, the Event Bus should be treated as infrastructure rather than as a new architectural agent, maintaining the seven-agent model while improving implementation clarity.

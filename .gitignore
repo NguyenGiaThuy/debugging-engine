@@ -54,5 +54,6 @@ temp/
 !.cursor/skills/
 !.cursor/skills/**
 
-# SMADW local case data
+# Debugging Engine local case data
+.debugging-engine/
 .smadw/

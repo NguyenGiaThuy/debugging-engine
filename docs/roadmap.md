@@ -1,6 +1,6 @@
 # Roadmap
 
-SMADW is architecture (an investigation kernel). Skills and IDE wrappers come last.
+Debugging Engine is architecture (an investigation kernel). Skills and IDE wrappers come last.
 
 ## Phase 1 — Runtime MVP (done)
 
@@ -8,7 +8,7 @@ Minimal agent-agnostic Python CLI kernel: domain model, JSONL Event Log, Case St
 
 ## Phase 2 — Validate the architecture (done)
 
-Stress scenarios + metrics (`smadw validate`), ADRs 0001–0004, surgical kernel policies.
+Stress scenarios + metrics (`debugging-engine validate`), ADRs 0001–0004, surgical kernel policies.
 
 ## Phase 3 — Framework API (done)
 
@@ -20,9 +20,9 @@ Cursor project skills wrap the kernel:
 
 | Skill | Path |
 | --- | --- |
-| `smadw-investigate` | [`.cursor/skills/smadw-investigate/`](../.cursor/skills/smadw-investigate/) |
-| `smadw-incident` | [`.cursor/skills/smadw-incident/`](../.cursor/skills/smadw-incident/) |
-| `smadw-performance` | [`.cursor/skills/smadw-performance/`](../.cursor/skills/smadw-performance/) |
+| `debugging-engine-investigate` | [`.cursor/skills/debugging-engine-investigate/`](../.cursor/skills/debugging-engine-investigate/) |
+| `debugging-engine-incident` | [`.cursor/skills/debugging-engine-incident/`](../.cursor/skills/debugging-engine-incident/) |
+| `debugging-engine-performance` | [`.cursor/skills/debugging-engine-performance/`](../.cursor/skills/debugging-engine-performance/) |
 
 See [ADR 0006](decisions/0006-skills-as-interfaces.md).
 

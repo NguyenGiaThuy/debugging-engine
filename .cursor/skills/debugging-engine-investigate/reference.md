@@ -1,17 +1,17 @@
-# SMADW reference (for agents)
+# Debugging Engine reference (for agents)
 
 ## CLI
 
 | Command | Purpose |
 | --- | --- |
-| `smadw open <issue.md>` | CaseCreated + UnknownDiscovered |
-| `smadw next <case-id>` | Judge Task JSON |
-| `smadw query <case-id> [slice]` | Projection (`summary`, `hypotheses`, …) |
-| `smadw submit <case-id> --events file.json` | Append domain events |
-| `smadw verify <case-id> <experiment-id>` | Run Verification Spec |
-| `smadw status` / `log` / `replay` | Inspect |
-| `smadw demo` | Stub e2e (offline) |
-| `smadw validate` | Phase 2 architectural scenarios |
+| `debugging-engine open <issue.md>` | CaseCreated + UnknownDiscovered |
+| `debugging-engine next <case-id>` | Judge Task JSON |
+| `debugging-engine query <case-id> [slice]` | Projection (`summary`, `hypotheses`, …) |
+| `debugging-engine submit <case-id> --events file.json` | Append domain events |
+| `debugging-engine verify <case-id> <experiment-id>` | Run Verification Spec |
+| `debugging-engine status` / `log` / `replay` | Inspect |
+| `debugging-engine demo` | Stub e2e (offline) |
+| `debugging-engine validate` | Phase 2 architectural scenarios |
 
 Install: `pip install -e ".[dev]"` (or `uv pip install -e ".[dev]"`).
 

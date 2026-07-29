@@ -2,7 +2,7 @@
 
 ## Context
 
-Phase 1 Task handoffs dumped near-complete registries (full explanations, patches, pytest stdout) into `smadw next` projections. Evidence events stored multi-kilobyte verification transcripts. This violates Part III §15 (agents request views, not full Case State) and caused measurable Event Log growth in the `evidence_bloat` scenario.
+Phase 1 Task handoffs dumped near-complete registries (full explanations, patches, pytest stdout) into `debugging-engine next` projections. Evidence events stored multi-kilobyte verification transcripts. This violates Part III §15 (agents request views, not full Case State) and caused measurable Event Log growth in the `evidence_bloat` scenario.
 
 ## Decision
 
@@ -15,7 +15,7 @@ Coding agents need enough structure to act, not the entire investigation history
 
 ## Consequences
 
-- Agents must `smadw query` for deeper detail when needed.
+- Agents must `debugging-engine query` for deeper detail when needed.
 - Full pytest output is not reconstructible from Evidence alone (exit codes and truncated tails remain).
 
 ## Alternatives considered

@@ -3,8 +3,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from smadw.domain.models import CaseState, DomainEvent
-from smadw.domain.validation import ValidationError, apply_event
+from debugging_engine.domain.models import CaseState, DomainEvent
+from debugging_engine.domain.validation import ValidationError, apply_event
 
 
 class JsonlEventStore:

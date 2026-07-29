@@ -1,4 +1,4 @@
-# SMADW v3.1
+# Debugging Engine v3.1
 
 # Part II — Agent Architecture
 
@@ -85,7 +85,7 @@ Hidden conversational memory is prohibited.
 
 # 3. Agent Overview
 
-SMADW defines seven architectural agents.
+Debugging Engine defines seven architectural agents.
 
 | Agent             | Primary Responsibility                  |
 | ----------------- | --------------------------------------- |
@@ -97,7 +97,7 @@ SMADW defines seven architectural agents.
 | Knowledge Service | Retrieve validated historical knowledge |
 | Human             | Supply external expertise when required |
 
-No additional architectural agents are defined in SMADW v3.1.
+No additional architectural agents are defined in Debugging Engine v3.1.
 
 ---
 

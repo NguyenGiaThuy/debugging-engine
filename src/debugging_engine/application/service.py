@@ -4,12 +4,12 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 
-from smadw.application.judge import Task
-from smadw.domain.models import AgentRole, DomainEvent, EventType, new_id
-from smadw.domain.validation import ValidationError
-from smadw.infrastructure.store import JsonlEventStore, ProjectionEngine, dump_case_summary, query_case
-from smadw.infrastructure.verify import run_verification
-from smadw.policies import DefaultSchedulingPolicy, SchedulingPolicy
+from debugging_engine.application.judge import Task
+from debugging_engine.domain.models import AgentRole, DomainEvent, EventType, new_id
+from debugging_engine.domain.validation import ValidationError
+from debugging_engine.infrastructure.store import JsonlEventStore, ProjectionEngine, dump_case_summary, query_case
+from debugging_engine.infrastructure.verify import run_verification
+from debugging_engine.policies import DefaultSchedulingPolicy, SchedulingPolicy
 
 
 def utc_now() -> str:
@@ -17,7 +17,7 @@ def utc_now() -> str:
 
 
 def default_store_root(repo_root: Path) -> Path:
-    return repo_root / ".smadw" / "cases"
+    return repo_root / ".debugging-engine" / "cases"
 
 
 PROGRESS_EVENT_TYPES = {

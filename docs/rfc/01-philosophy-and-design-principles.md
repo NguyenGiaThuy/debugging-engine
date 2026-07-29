@@ -1,10 +1,10 @@
-# SMADW v3.1
+# Debugging Engine v3.1
 
 # Part I — Philosophy & Design Principles
 
 > **Status:** Normative
 >
-> This chapter defines the immutable principles of SMADW. Every subsequent chapter MUST conform to this chapter. If any later chapter contradicts this chapter, this chapter takes precedence.
+> This chapter defines the immutable principles of Debugging Engine. Every subsequent chapter MUST conform to this chapter. If any later chapter contradicts this chapter, this chapter takes precedence.
 
 ---
 
@@ -14,9 +14,9 @@ Software debugging is fundamentally an epistemic process. Developers begin with 
 
 Large Language Models have significantly improved the ability to generate explanations, propose code changes, and automate routine engineering tasks. However, most existing agentic debugging systems remain centered on conversational reasoning rather than structured investigation. They frequently optimize for producing plausible answers instead of systematically reducing uncertainty.
 
-SMADW (State Machine–Driven Agentic Debugging Workflow) proposes a different approach.
+Debugging Engine (State Machine–Driven Agentic Debugging Workflow) proposes a different approach.
 
-Rather than treating debugging as a sequence of prompts exchanged between autonomous agents, SMADW models debugging as a stateful, event-driven investigation in which explicit representations of uncertainty, hypotheses, experiments, evidence, and decisions govern the behavior of every agent.
+Rather than treating debugging as a sequence of prompts exchanged between autonomous agents, Debugging Engine models debugging as a stateful, event-driven investigation in which explicit representations of uncertainty, hypotheses, experiments, evidence, and decisions govern the behavior of every agent.
 
 Agents are not responsible for "finding the answer."
 
@@ -112,13 +112,13 @@ Investigations require
 * evidence management
 * revision history
 
-SMADW therefore models debugging as an investigation rather than a conversation.
+Debugging Engine therefore models debugging as an investigation rather than a conversation.
 
 ---
 
 # 3. Architectural Vision
 
-SMADW views debugging as an iterative process of uncertainty reduction.
+Debugging Engine views debugging as an iterative process of uncertainty reduction.
 
 The objective of an investigation is not to maximize confidence in a hypothesis.
 
@@ -138,7 +138,7 @@ Validated explanations become decisions.
 
 # 4. Core Design Principles
 
-The following principles define the philosophical foundation of SMADW.
+The following principles define the philosophical foundation of Debugging Engine.
 
 These principles are normative.
 
@@ -162,7 +162,7 @@ Every promotion requires supporting evidence.
 
 Traditional debugging often begins with hypotheses.
 
-SMADW begins with unknowns.
+Debugging Engine begins with unknowns.
 
 Examples include
 
@@ -262,7 +262,7 @@ If these questions cannot be answered, the decision is architecturally invalid.
 
 ## Principle 7 — Investigations Are Event-Driven
 
-SMADW does not execute fixed reasoning loops.
+Debugging Engine does not execute fixed reasoning loops.
 
 Instead, investigations evolve through events.
 
@@ -319,7 +319,7 @@ before discussing implementation technologies.
 
 # 5. Non-Goals
 
-SMADW intentionally does not attempt to solve every engineering problem.
+Debugging Engine intentionally does not attempt to solve every engineering problem.
 
 It is **not**
 
@@ -353,7 +353,7 @@ These are not implementation choices; they are architectural requirements.
 
 # 7. Success Criteria
 
-An implementation conforms to SMADW if it can demonstrate the following properties:
+An implementation conforms to Debugging Engine if it can demonstrate the following properties:
 
 * Investigations are represented as explicit, versioned state.
 * Agents interact only through the Case State.
@@ -365,7 +365,7 @@ An implementation conforms to SMADW if it can demonstrate the following properti
 * Completed investigations are reproducible from recorded events.
 * Every architectural concept is formally specified through schemas and contracts.
 
-An implementation that satisfies these criteria is considered SMADW-compliant, regardless of programming language, LLM provider, orchestration framework, or deployment environment.
+An implementation that satisfies these criteria is considered Debugging Engine–compliant, regardless of programming language, LLM provider, orchestration framework, or deployment environment.
 
 ---
 

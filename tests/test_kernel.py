@@ -4,11 +4,11 @@ from pathlib import Path
 
 import pytest
 
-from smadw.application.service import CaseService
-from smadw.domain.models import AgentRole, DomainEvent, EventType, new_id
-from smadw.domain.validation import ValidationError, apply_event
-from smadw.infrastructure.store import JsonlEventStore, ProjectionEngine
-from smadw.runtime.stubs.demo import run_stub_investigation
+from debugging_engine.application.service import CaseService
+from debugging_engine.domain.models import AgentRole, DomainEvent, EventType, new_id
+from debugging_engine.domain.validation import ValidationError, apply_event
+from debugging_engine.infrastructure.store import JsonlEventStore, ProjectionEngine
+from debugging_engine.runtime.stubs.demo import run_stub_investigation
 
 
 def test_case_created_and_replay(tmp_path: Path):
@@ -77,7 +77,7 @@ def test_stub_demo_resolves(tmp_path: Path):
     cache_path = root / "subject" / "cache.py"
     original = cache_path.read_text(encoding="utf-8")
     buggy = '''\
-"""Tiny in-memory cache used as the SMADW investigation subject."""
+"""Tiny in-memory cache used as the Debugging Engine investigation subject."""
 
 
 def normalize_key(key: str) -> str:

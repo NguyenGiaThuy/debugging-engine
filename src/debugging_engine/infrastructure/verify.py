@@ -5,9 +5,9 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
-from smadw.domain.models import AgentRole, DomainEvent, EventType, ExperimentStatus, new_id
-from smadw.domain.policies import MAX_OBSERVATION_CHARS
-from smadw.infrastructure.store import ProjectionEngine
+from debugging_engine.domain.models import AgentRole, DomainEvent, EventType, ExperimentStatus, new_id
+from debugging_engine.domain.policies import MAX_OBSERVATION_CHARS
+from debugging_engine.infrastructure.store import ProjectionEngine
 
 
 def utc_now() -> str:
