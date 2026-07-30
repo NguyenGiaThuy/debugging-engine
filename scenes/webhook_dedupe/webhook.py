@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 import hashlib
+import json
 
 
 @dataclass
@@ -22,9 +23,11 @@ class WebhookDispatcher:
     deliveries: list[dict] = field(default_factory=list)
 
     def _idempotency_key(self, event_id: str, payload: dict) -> str:
-        # BUG: hashes only event_id. Retries with an updated payload (e.g. status
-        # correction pending → paid) are silently dropped as duplicates.
-        return hashlib.sha256(event_id.encode()).hexdigest()
+        # Key on event_id + delivered body so status corrections are not swallowed,
+        # while identical retries still collide.
+        body = {k: v for k, v in payload.items() if k != "_fail_once"}
+        material = event_id + "|" + json.dumps(body, sort_keys=True, separators=(",", ":"))
+        return hashlib.sha256(material.encode()).hexdigest()
 
     def deliver(self, event_id: str, payload: dict, *, sink: list[dict]) -> DeliveryResult:
         key = self._idempotency_key(event_id, payload)
