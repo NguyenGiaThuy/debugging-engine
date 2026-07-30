@@ -145,6 +145,7 @@ def test_stall_escalation_task(tmp_path: Path):
         task = svc.next_task(case_id)
     assert task is not None
     assert EventType.INVESTIGATION_ESCALATED.value in task["allowed_event_types"]
+    assert task["role"] in {AgentRole.HUMAN.value, AgentRole.JUDGE.value}
 
 
 def test_phase2_scenarios(tmp_path: Path):

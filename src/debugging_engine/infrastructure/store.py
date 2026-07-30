@@ -120,6 +120,62 @@ class ProjectionEngine:
 
 
 def dump_case_summary(state: CaseState) -> dict:
+    """Projection-friendly summary (K8): counts + light views, not full dumps."""
+    return {
+        "case_id": state.case_id,
+        "title": state.title,
+        "status": state.status,
+        "issue_path": state.issue_path,
+        "revision": state.revision,
+        "event_count": state.event_count,
+        "counts": {
+            "unknowns": len(state.unknowns),
+            "hypotheses": len(state.hypotheses),
+            "experiments": len(state.experiments),
+            "evidence": len(state.evidence),
+            "interpretations": len(state.interpretations),
+        },
+        "unknowns": [
+            {
+                "id": u.id,
+                "title": u.title,
+                "status": u.status,
+                "parent_unknown": u.parent_unknown,
+                "revision": u.revision,
+            }
+            for u in state.unknowns.values()
+        ],
+        "hypotheses": [
+            {
+                "id": h.id,
+                "title": h.title,
+                "status": h.status,
+                "unknown_id": h.unknown_id,
+                "revision": h.revision,
+            }
+            for h in state.hypotheses.values()
+        ],
+        "decision_state": {
+            k: state.decision_state[k]
+            for k in (
+                "root_cause_hypothesis_id",
+                "escalated",
+                "escalation_reason",
+                "adversary_challenged",
+                "scheduling_cycles",
+                "stall_cycles",
+                "last_progress_revision",
+                "last_task",
+                "human_responses",
+                "partial_resolution",
+            )
+            if k in state.decision_state
+        },
+    }
+
+
+def dump_case_full(state: CaseState) -> dict:
+    """Full Case State dump — prefer query('full') / status(full=True)."""
     return {
         "case_id": state.case_id,
         "title": state.title,
@@ -140,6 +196,8 @@ def query_case(state: CaseState, query: str) -> dict:
     q = query.strip().lower()
     if q in {"", "summary", "case"}:
         return dump_case_summary(state)
+    if q in {"full", "all"}:
+        return dump_case_full(state)
     if q.startswith("unknown"):
         return {"unknowns": {k: v.model_dump() for k, v in state.unknowns.items()}}
     if q.startswith("hypothes"):
@@ -157,4 +215,7 @@ def query_case(state: CaseState, query: str) -> dict:
         return {"interpretations": {k: v.model_dump() for k, v in state.interpretations.items()}}
     if q.startswith("decision"):
         return {"decision_state": state.decision_state}
-    return {"error": f"Unknown query: {query}", "hint": "summary|unknowns|hypotheses|experiments|evidence|interpretations|decisions"}
+    return {
+        "error": f"Unknown query: {query}",
+        "hint": "summary|full|unknowns|hypotheses|experiments|evidence|interpretations|decisions",
+    }

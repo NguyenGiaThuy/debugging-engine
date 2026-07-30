@@ -110,6 +110,7 @@ def run_stub_investigation(service: CaseService, issue_path: Path) -> dict:
                     "title": "Verbose logging overhead",
                     "explanation": "Unrelated logging configuration might explain perceived misses.",
                     "assumptions": ["Logging is enabled in the workspace"],
+                    "objection_category": "Alternative Hypothesis",
                 },
             ),
         ]
@@ -199,6 +200,7 @@ def run_stub_investigation(service: CaseService, issue_path: Path) -> dict:
                     "evidence_id": ev_id,
                     "hypothesis_id": hyp_logging,
                     "outcome": "INCONCLUSIVE",
+                    "objection_category": "Incomplete Explanation",
                     "rationale": "Test failure does not mention logging; need discriminating fix experiment.",
                 },
             ),
@@ -264,6 +266,7 @@ def run_stub_investigation(service: CaseService, issue_path: Path) -> dict:
                         "evidence_id": fix_ev,
                         "hypothesis_id": hyp_logging,
                         "outcome": "WEAKENS",
+                        "objection_category": "Alternative Hypothesis",
                         "rationale": "Passing fix falsifies logging-overhead alternative.",
                     },
                 ),

@@ -22,6 +22,47 @@ def truncate_observation(text: str, limit: int = MAX_OBSERVATION_CHARS) -> str:
     return text[: limit - 16] + "\n...[truncated]"
 
 
+def _parse_metric_lines(stdout: str) -> dict[str, float]:
+    """Parse `metric_name=1.23` lines from stdout for rich Verification Specs."""
+    values: dict[str, float] = {}
+    for line in stdout.splitlines():
+        line = line.strip()
+        if "=" not in line or line.startswith("#"):
+            continue
+        key, _, raw = line.partition("=")
+        key = key.strip()
+        raw = raw.strip()
+        if not key:
+            continue
+        try:
+            values[key] = float(raw)
+        except ValueError:
+            continue
+    return values
+
+
+def _check_thresholds(
+    thresholds: dict[str, float],
+    values: dict[str, float],
+) -> tuple[bool, dict[str, str]]:
+    """Require each threshold key to be present and <= threshold (upper-bound)."""
+    detail: dict[str, str] = {}
+    if not thresholds:
+        return True, detail
+    ok = True
+    for name, limit in thresholds.items():
+        if name not in values:
+            detail[name] = "missing"
+            ok = False
+            continue
+        if values[name] > limit:
+            detail[name] = f"{values[name]} > {limit}"
+            ok = False
+        else:
+            detail[name] = "ok"
+    return ok, detail
+
+
 def _resolve_command(command: list[str]) -> list[str]:
     """Prefer the current interpreter for python module runners."""
     if not command:
@@ -197,11 +238,21 @@ def run_verification(
     observation = truncate_observation(raw_observation)
     evidence_id = new_id()
     success = result.returncode == spec.expected_exit_code
+    metric_values = _parse_metric_lines(result.stdout)
+    threshold_ok, threshold_detail = _check_thresholds(spec.thresholds, metric_values)
+    if spec.thresholds and not threshold_ok:
+        success = False
     attrs = {
         "exit_code": result.returncode,
         "passed": success,
         "observation_truncated": len(raw_observation) > len(observation),
         "raw_observation_chars": len(raw_observation),
+        "metrics": metric_values,
+        "thresholds": dict(spec.thresholds),
+        "baselines": dict(spec.baselines),
+        "threshold_ok": threshold_ok if spec.thresholds else None,
+        "threshold_detail": threshold_detail,
+        "declared_metrics": list(spec.metrics),
     }
 
     state = engine.project(case_id)
@@ -230,11 +281,14 @@ def run_verification(
     events.append(ev_rec)
 
     if not success:
+        reason = "UnexpectedExitCode"
+        if result.returncode == spec.expected_exit_code and spec.thresholds and not threshold_ok:
+            reason = "ThresholdNotMet"
         fail = _fail_experiment(
             engine,
             case_id,
             experiment_id,
-            reason="UnexpectedExitCode",
+            reason=reason,
             causation_id=ev_rec.event_id,
             observation=observation,
         )

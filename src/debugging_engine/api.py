@@ -83,8 +83,8 @@ class Case:
     def query(self, q: str = "summary") -> dict[str, Any]:
         return self.engine.service.query(self.case_id, q)
 
-    def status(self) -> dict[str, Any]:
-        return self.engine.service.status(self.case_id)
+    def status(self, *, full: bool = False) -> dict[str, Any]:
+        return self.engine.service.status(self.case_id, full=full)
 
     def log(self) -> list[dict[str, Any]]:
         return self.engine.service.log(self.case_id)

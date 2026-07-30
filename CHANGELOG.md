@@ -4,6 +4,19 @@ All notable changes to the **debugging-engine** package are recorded here.
 The architecture specification remains **Debugging Engine v1.0.0** (`docs/SPECIFICATION.md`);
 package versions below are kernel / CLI releases that implement subsets of that spec.
 
+## [1.0.8] — 2026-07-30
+
+### Changed
+- **Investigate vs incident skills:** investigate is report-only (observational `RootCauseAccepted` + `issues/` write-up); incident owns Implementer/fix.
+- Judge no longer forces intervention before accept when none was proposed (`report_only` path).
+- **K1** Rich Verification Spec: optional `metrics` / `thresholds` / `baselines`; verify parses `name=value` stdout lines.
+- **K2** Adversary must supply `objection_category` on hypotheses/interpretations.
+- **K3/K4** `UnknownPartiallyResolved` + `parent_unknown` / `child_unknowns` wiring.
+- **K5** Per-object `revision` on Unknown/Hypothesis/Experiment/Evidence/Interpretation.
+- **K6** `SyncJsonlEventBus` / `AsyncQueueEventBus` abstraction.
+- **K7** `Human` role + `HumanResponseReceived`; stall schedules Human before Judge escalate.
+- **K8** `status()` defaults to projection summary; `status(full=True)` / `query("full")` for full dump.
+
 ## [1.0.7] — 2026-07-30
 
 ### Changed

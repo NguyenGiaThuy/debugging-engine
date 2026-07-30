@@ -97,6 +97,13 @@ Patch map keys and `working_directory` must be relative paths **inside** the rep
 
 After new SUPPORTS evidence, Judge typically schedules an **Adversary** rebuttal before the next approve/accept.
 
+### Skills: investigate vs incident
+
+| Skill | Mode | Interventions / Implementer |
+| --- | --- | --- |
+| `debugging-engine-investigate` | Report-only | **Forbidden.** Accept root cause on observational evidence; write `issues/<slug>.md`; fix later via incident. |
+| `debugging-engine-incident` | Fix | **Allowed.** Propose `experiment_class=intervention` + `patch`, Implementer, verify, then accept. |
+
 ### RootCauseAccepted
 
 ```json
@@ -115,6 +122,8 @@ Kernel gates (all required):
 - At least one verification with `passed: true` and experiment COMPLETED
 - If any intervention/patched experiment exists, one of them must have passed
 - Competing hypotheses are rejected or suspended
+
+Investigate (report-only) must not create intervention experiments, so the intervention gate does not apply.
 
 ### InvestigationEscalated
 
@@ -136,9 +145,12 @@ Kernel gates (all required):
 
 `Missing Evidence` | `Alternative Hypothesis` | `Invalid Assumption` | `Incomplete Explanation` | `Unsupported Causal Link` | `Experiment Design Flaw`
 
+Adversary `HypothesisProposed` and `InterpretationSubmitted` events **must** include `"objection_category"` with one of the values above.
+
 ## Policies (Phase 2)
 
 - Max **5** active hypotheses per Unknown.
 - Evidence observations truncated (~2 KiB).
 - Stall cycles → Judge asks to escalate.
 - One Judge Task at a time (Spec §10 parallel execution is not implemented in the package).
+- After SUPPORTS with no pending intervention, Judge may accept root cause (report-only). Propose an intervention only when running the **incident** skill.

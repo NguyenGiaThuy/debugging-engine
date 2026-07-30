@@ -82,6 +82,7 @@ def test_analyst_cannot_forge_adversary_producer(tmp_path: Path):
                         "unknown_id": unk,
                         "title": "forged",
                         "explanation": "e",
+                        "objection_category": "Alternative Hypothesis",
                     },
                 )
             ]
@@ -142,6 +143,7 @@ def test_adversary_reengages_after_unrebutted_supports(tmp_path: Path):
                     "unknown_id": unk,
                     "title": "alt",
                     "explanation": "e",
+                    "objection_category": "Alternative Hypothesis",
                 },
             )
         ]

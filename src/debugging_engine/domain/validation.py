@@ -16,6 +16,7 @@ from debugging_engine.domain.models import (
     Interpretation,
     InterpretationOutcome,
     InvestigationStatus,
+    ObjectionCategory,
     Unknown,
     UnknownStatus,
     VerificationSpec,
@@ -60,6 +61,12 @@ def validate_event(state: CaseState | None, event: DomainEvent) -> None:
             raise ValidationError("UnknownDiscovered requires id and title")
         if payload["id"] in state.unknowns:
             raise ValidationError("Unknown already exists", {"id": payload["id"]})
+        parent = payload.get("parent_unknown")
+        if parent is not None:
+            if parent not in state.unknowns:
+                raise ValidationError("parent_unknown does not exist", {"parent_unknown": parent})
+            if parent == payload["id"]:
+                raise ValidationError("parent_unknown cannot reference self")
         return
 
     if et == EventType.UNKNOWN_RESOLVED:
@@ -69,6 +76,34 @@ def validate_event(state: CaseState | None, event: DomainEvent) -> None:
         unk = state.unknowns[uid]
         if not can_transition_unknown(unk.status, UnknownStatus.RESOLVED):
             raise ValidationError(f"Invalid unknown transition {unk.status} -> RESOLVED")
+        return
+
+    if et == EventType.UNKNOWN_PARTIALLY_RESOLVED:
+        uid = payload.get("unknown_id")
+        if not uid or uid not in state.unknowns:
+            raise ValidationError("UnknownPartiallyResolved requires existing unknown_id")
+        unk = state.unknowns[uid]
+        if not can_transition_unknown(unk.status, UnknownStatus.PARTIALLY_RESOLVED):
+            raise ValidationError(
+                f"Invalid unknown transition {unk.status} -> PARTIALLY_RESOLVED"
+            )
+        if not payload.get("rationale"):
+            raise ValidationError("UnknownPartiallyResolved requires rationale")
+        return
+
+    if et == EventType.HUMAN_RESPONSE_RECEIVED:
+        if event.producer != AgentRole.HUMAN:
+            raise ValidationError(
+                "HumanResponseReceived requires producer Human",
+                {"producer": event.producer},
+            )
+        if not payload.get("message"):
+            raise ValidationError("HumanResponseReceived requires message")
+        return
+
+    if et == EventType.KNOWLEDGE_VALIDATED:
+        if not payload.get("fingerprint") and not payload.get("knowledge_id"):
+            raise ValidationError("KnowledgeValidated requires fingerprint or knowledge_id")
         return
 
     if et == EventType.HYPOTHESIS_PROPOSED:
@@ -111,6 +146,19 @@ def validate_event(state: CaseState | None, event: DomainEvent) -> None:
                     "max": MAX_ACTIVE_HYPOTHESES_PER_UNKNOWN,
                 },
             )
+        if event.producer == AgentRole.ADVERSARY:
+            cat = payload.get("objection_category")
+            if not cat:
+                raise ValidationError(
+                    "Adversary HypothesisProposed requires objection_category",
+                )
+            try:
+                ObjectionCategory(cat)
+            except ValueError as exc:
+                raise ValidationError(
+                    f"Invalid objection_category {cat}",
+                    {"allowed": [c.value for c in ObjectionCategory]},
+                ) from exc
         return
 
     if et == EventType.HYPOTHESIS_PROMOTED:
@@ -228,6 +276,19 @@ def validate_event(state: CaseState | None, event: DomainEvent) -> None:
             InterpretationOutcome(payload["outcome"])
         except ValueError as exc:
             raise ValidationError(f"Invalid interpretation outcome {payload['outcome']}") from exc
+        if event.producer == AgentRole.ADVERSARY:
+            cat = payload.get("objection_category")
+            if not cat:
+                raise ValidationError(
+                    "Adversary InterpretationSubmitted requires objection_category",
+                )
+            try:
+                ObjectionCategory(cat)
+            except ValueError as exc:
+                raise ValidationError(
+                    f"Invalid objection_category {cat}",
+                    {"allowed": [c.value for c in ObjectionCategory]},
+                ) from exc
         return
 
     if et == EventType.ROOT_CAUSE_ACCEPTED:
@@ -368,6 +429,8 @@ def validate_event(state: CaseState | None, event: DomainEvent) -> None:
         EventType.EXPERIMENT_EXPIRED,
         EventType.INTERPRETATION_WITHDRAWN,
         EventType.UNKNOWN_REOPENED,
+        EventType.HUMAN_RESPONSE_RECEIVED,
+        EventType.KNOWLEDGE_VALIDATED,
     }:
         return
 
@@ -409,6 +472,7 @@ def apply_event(state: CaseState | None, event: DomainEvent) -> CaseState:
     elif et == EventType.INVESTIGATION_CLOSED:
         s.decision_state["closed"] = True
     elif et == EventType.UNKNOWN_DISCOVERED:
+        parent = payload.get("parent_unknown")
         unk = Unknown(
             id=payload["id"],
             title=payload["title"],
@@ -416,12 +480,31 @@ def apply_event(state: CaseState | None, event: DomainEvent) -> CaseState:
             priority=payload.get("priority", "HIGH"),
             status=UnknownStatus.ACTIVE,
             related_components=payload.get("related_components", []),
+            parent_unknown=parent,
+            revision=1,
         )
         s.unknowns[unk.id] = unk
+        if parent is not None and parent in s.unknowns:
+            parent_unk = s.unknowns[parent]
+            if unk.id not in parent_unk.child_unknowns:
+                parent_unk.child_unknowns = [*parent_unk.child_unknowns, unk.id]
+            parent_unk.revision += 1
     elif et == EventType.UNKNOWN_RESOLVED:
-        s.unknowns[payload["unknown_id"]].status = UnknownStatus.RESOLVED
+        unk = s.unknowns[payload["unknown_id"]]
+        unk.status = UnknownStatus.RESOLVED
+        unk.revision += 1
+    elif et == EventType.UNKNOWN_PARTIALLY_RESOLVED:
+        unk = s.unknowns[payload["unknown_id"]]
+        unk.status = UnknownStatus.PARTIALLY_RESOLVED
+        unk.revision += 1
+        s.decision_state["partial_resolution"] = {
+            "unknown_id": payload["unknown_id"],
+            "rationale": payload.get("rationale"),
+        }
     elif et == EventType.UNKNOWN_REOPENED:
-        s.unknowns[payload["unknown_id"]].status = UnknownStatus.ACTIVE
+        unk = s.unknowns[payload["unknown_id"]]
+        unk.status = UnknownStatus.ACTIVE
+        unk.revision += 1
     elif et == EventType.HYPOTHESIS_PROPOSED:
         hyp = Hypothesis(
             id=payload["id"],
@@ -430,20 +513,29 @@ def apply_event(state: CaseState | None, event: DomainEvent) -> CaseState:
             explanation=payload["explanation"],
             assumptions=payload.get("assumptions", []),
             parent_id=payload.get("parent_id"),
+            objection_category=payload.get("objection_category"),
+            revision=1,
         )
         s.hypotheses[hyp.id] = hyp
         if event.producer == AgentRole.ADVERSARY:
             s.decision_state["adversary_challenged"] = True
     elif et == EventType.HYPOTHESIS_PROMOTED:
-        s.hypotheses[payload["hypothesis_id"]].status = HypothesisStatus(payload["to_status"])
+        hyp = s.hypotheses[payload["hypothesis_id"]]
+        hyp.status = HypothesisStatus(payload["to_status"])
+        hyp.revision += 1
     elif et == EventType.HYPOTHESIS_WEAKENED:
-        s.hypotheses[payload["hypothesis_id"]].status = HypothesisStatus.WEAKENED
+        hyp = s.hypotheses[payload["hypothesis_id"]]
+        hyp.status = HypothesisStatus.WEAKENED
+        hyp.revision += 1
     elif et == EventType.HYPOTHESIS_SUSPENDED:
-        s.hypotheses[payload["hypothesis_id"]].status = HypothesisStatus.SUSPENDED
+        hyp = s.hypotheses[payload["hypothesis_id"]]
+        hyp.status = HypothesisStatus.SUSPENDED
+        hyp.revision += 1
     elif et == EventType.HYPOTHESIS_REJECTED:
         # Cascade: rejecting a parent rejects all descendants (deterministic on replay).
         rejected_root = payload["hypothesis_id"]
         s.hypotheses[rejected_root].status = HypothesisStatus.REJECTED
+        s.hypotheses[rejected_root].revision += 1
         changed = True
         while changed:
             changed = False
@@ -454,6 +546,7 @@ def apply_event(state: CaseState | None, event: DomainEvent) -> CaseState:
                     and hyp.status != HypothesisStatus.REJECTED
                 ):
                     hyp.status = HypothesisStatus.REJECTED
+                    hyp.revision += 1
                     changed = True
     elif et == EventType.EXPERIMENT_PROPOSED:
         spec_data = payload.get("verification_spec")
@@ -470,22 +563,35 @@ def apply_event(state: CaseState | None, event: DomainEvent) -> CaseState:
             verification_spec=spec,
             experiment_class=payload.get("experiment_class", "observational"),
             patch=payload.get("patch"),
+            revision=1,
         )
         s.experiments[exp.id] = exp
         if event.producer == AgentRole.ADVERSARY:
             s.decision_state["adversary_challenged"] = True
     elif et == EventType.EXPERIMENT_APPROVED:
-        s.experiments[payload["experiment_id"]].status = ExperimentStatus.APPROVED
+        exp = s.experiments[payload["experiment_id"]]
+        exp.status = ExperimentStatus.APPROVED
+        exp.revision += 1
     elif et == EventType.EXPERIMENT_SCHEDULED:
-        s.experiments[payload["experiment_id"]].status = ExperimentStatus.SCHEDULED
+        exp = s.experiments[payload["experiment_id"]]
+        exp.status = ExperimentStatus.SCHEDULED
+        exp.revision += 1
     elif et == EventType.EXPERIMENT_STARTED:
-        s.experiments[payload["experiment_id"]].status = ExperimentStatus.RUNNING
+        exp = s.experiments[payload["experiment_id"]]
+        exp.status = ExperimentStatus.RUNNING
+        exp.revision += 1
     elif et == EventType.EXPERIMENT_COMPLETED:
-        s.experiments[payload["experiment_id"]].status = ExperimentStatus.COMPLETED
+        exp = s.experiments[payload["experiment_id"]]
+        exp.status = ExperimentStatus.COMPLETED
+        exp.revision += 1
     elif et == EventType.EXPERIMENT_CANCELLED:
-        s.experiments[payload["experiment_id"]].status = ExperimentStatus.CANCELLED
+        exp = s.experiments[payload["experiment_id"]]
+        exp.status = ExperimentStatus.CANCELLED
+        exp.revision += 1
     elif et == EventType.EXPERIMENT_EXPIRED:
-        s.experiments[payload["experiment_id"]].status = ExperimentStatus.EXPIRED
+        exp = s.experiments[payload["experiment_id"]]
+        exp.status = ExperimentStatus.EXPIRED
+        exp.revision += 1
     elif et == EventType.EVIDENCE_RECORDED:
         ev = Evidence(
             id=payload["id"],
@@ -497,6 +603,7 @@ def apply_event(state: CaseState | None, event: DomainEvent) -> CaseState:
             collection_method=payload.get("collection_method", "pytest"),
             reliability=payload.get("reliability", "HIGH"),
             attributes=payload.get("attributes", {}),
+            revision=1,
         )
         s.evidence[ev.id] = ev
     elif et == EventType.INTERPRETATION_SUBMITTED:
@@ -507,6 +614,8 @@ def apply_event(state: CaseState | None, event: DomainEvent) -> CaseState:
             outcome=InterpretationOutcome(payload["outcome"]),
             rationale=payload["rationale"],
             producer=event.producer,
+            objection_category=payload.get("objection_category"),
+            revision=1,
         )
         s.interpretations[interp.id] = interp
         hyp = s.hypotheses[interp.hypothesis_id]
@@ -514,19 +623,20 @@ def apply_event(state: CaseState | None, event: DomainEvent) -> CaseState:
             interp.outcome == InterpretationOutcome.SUPPORTS
             and hyp.status == HypothesisStatus.PROPOSED
         ):
-            # Advance one positive rung so Judge can see supported candidates without
-            # requiring a separate HypothesisPromoted event.
             hyp.status = HypothesisStatus.PLAUSIBLE
+            hyp.revision += 1
         elif (
             interp.outcome == InterpretationOutcome.SUPPORTS
             and hyp.status == HypothesisStatus.PLAUSIBLE
         ):
             hyp.status = HypothesisStatus.SUPPORTED
+            hyp.revision += 1
         elif (
             interp.outcome == InterpretationOutcome.SUPPORTS
             and hyp.status == HypothesisStatus.SUPPORTED
         ):
             hyp.status = HypothesisStatus.STRONGLY_SUPPORTED
+            hyp.revision += 1
         elif (
             interp.outcome == InterpretationOutcome.WEAKENS
             and hyp.status
@@ -538,10 +648,33 @@ def apply_event(state: CaseState | None, event: DomainEvent) -> CaseState:
             }
         ):
             hyp.status = HypothesisStatus.WEAKENED
+            hyp.revision += 1
+    elif et == EventType.HUMAN_RESPONSE_RECEIVED:
+        responses = list(s.decision_state.get("human_responses", []))
+        responses.append(
+            {
+                "message": payload.get("message"),
+                "timestamp": event.timestamp,
+                "attributes": payload.get("attributes", {}),
+            }
+        )
+        s.decision_state["human_responses"] = responses
+    elif et == EventType.KNOWLEDGE_VALIDATED:
+        items = list(s.decision_state.get("knowledge", []))
+        items.append(
+            {
+                "fingerprint": payload.get("fingerprint"),
+                "knowledge_id": payload.get("knowledge_id"),
+                "timestamp": event.timestamp,
+            }
+        )
+        s.decision_state["knowledge"] = items
     elif et == EventType.ROOT_CAUSE_ACCEPTED:
         s.decision_state["root_cause_hypothesis_id"] = payload["hypothesis_id"]
         s.decision_state["root_cause_rationale"] = payload["rationale"]
-        s.hypotheses[payload["hypothesis_id"]].status = HypothesisStatus.ACCEPTED
+        hyp = s.hypotheses[payload["hypothesis_id"]]
+        hyp.status = HypothesisStatus.ACCEPTED
+        hyp.revision += 1
         s.status = InvestigationStatus.RESOLVED
     elif et == EventType.PATCH_APPLIED:
         s.decision_state.setdefault("patches", []).append(payload)
@@ -550,6 +683,7 @@ def apply_event(state: CaseState | None, event: DomainEvent) -> CaseState:
         eid = payload.get("experiment_id")
         if eid and eid in s.experiments:
             s.experiments[eid].status = ExperimentStatus.FAILED
+            s.experiments[eid].revision += 1
     elif et == EventType.VALIDATION_FAILED:
         s.decision_state.setdefault("validation_failures", []).append(payload)
 

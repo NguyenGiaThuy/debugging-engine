@@ -20,7 +20,7 @@ from fixtures import cache_miss_workspace
 
 
 def test_public_exports():
-    assert __version__ == "1.0.7"
+    assert __version__ == "1.0.8"
     assert callable(schedule_next_task)
     assert issubclass(DefaultSchedulingPolicy, object)
 
@@ -66,7 +66,7 @@ def test_submit_and_query_via_api(tmp_path: Path):
     workspace, issue = cache_miss_workspace(tmp_path)
     engine = Engine(repo_root=workspace, store_root=tmp_path / "cases")
     case = Case.open(engine, issue)
-    unk = next(iter(case.status()["unknowns"]))
+    unk = case.status()["unknowns"][0]["id"]
     case.submit(
         DomainEvent(
             case_id=case.case_id,

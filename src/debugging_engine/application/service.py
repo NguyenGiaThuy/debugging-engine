@@ -220,11 +220,13 @@ class CaseService:
         )
         return case_id, events
 
-    def status(self, case_id: str) -> dict:
+    def status(self, case_id: str, *, full: bool = False) -> dict:
         state = self._state_with_meta(case_id)
         if state is None:
             raise KeyError(case_id)
-        return dump_case_summary(state)
+        from debugging_engine.infrastructure.store import dump_case_full, dump_case_summary
+
+        return dump_case_full(state) if full else dump_case_summary(state)
 
     def next_task(self, case_id: str) -> dict:
         state = self._state_with_meta(case_id)
@@ -278,7 +280,9 @@ class CaseService:
         return [e.model_dump(mode="json") for e in self.store.load_events(case_id)]
 
     def replay(self, case_id: str) -> dict:
+        from debugging_engine.infrastructure.store import dump_case_full
+
         state = self._state_with_meta(case_id)
         if state is None:
             raise KeyError(case_id)
-        return dump_case_summary(state)
+        return dump_case_full(state)

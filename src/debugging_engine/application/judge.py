@@ -276,6 +276,29 @@ def schedule_next_task(state: CaseState) -> Task:
 
     stall = int(state.decision_state.get("stall_cycles", 0))
     if stall >= STALL_CYCLES_BEFORE_ESCALATION:
+        human_responses = state.decision_state.get("human_responses") or []
+        if not human_responses:
+            return Task(
+                case_id=state.case_id,
+                role=AgentRole.HUMAN,
+                objective=(
+                    f"No investigation progress for {stall} scheduling cycles. "
+                    "Provide guidance or constraints; Judge may still escalate."
+                ),
+                allowed_event_types=[
+                    EventType.HUMAN_RESPONSE_RECEIVED.value,
+                    EventType.INVESTIGATION_ESCALATED.value,
+                ],
+                projection={
+                    **_slice_for_role(state, AgentRole.JUDGE),
+                    "stall_cycles": stall,
+                    "threshold": STALL_CYCLES_BEFORE_ESCALATION,
+                },
+                hints=[
+                    "Submit HumanResponseReceived as producer Human.",
+                    "Waiting indefinitely is prohibited (Part IV starvation policy).",
+                ],
+            )
         return Task(
             case_id=state.case_id,
             role=AgentRole.JUDGE,
@@ -550,40 +573,65 @@ def schedule_next_task(state: CaseState) -> Task:
             )
             for e in state.experiments.values()
         )
-        if not successful_fix:
+        pending_intervention = any(
+            (e.experiment_class == "intervention" or bool(e.patch))
+            and e.status
+            in {
+                ExperimentStatus.PROPOSED,
+                ExperimentStatus.APPROVED,
+                ExperimentStatus.SCHEDULED,
+                ExperimentStatus.RUNNING,
+            }
+            for e in state.experiments.values()
+        )
+        # Report-only path: observational evidence is enough to accept when no
+        # intervention was proposed (investigate skill). Incident skill proposes
+        # interventions explicitly before this branch is reached for approve/run.
+        if successful_fix or not pending_intervention:
             return Task(
                 case_id=state.case_id,
-                role=AgentRole.ANALYST,
+                role=AgentRole.JUDGE,
                 objective=(
-                    "Evidence supports a root-cause hypothesis. Propose an intervention experiment "
-                    "that implements and verifies the fix before accepting root cause."
+                    "Fix verified. Accept root cause or escalate if residual risk remains."
+                    if successful_fix
+                    else (
+                        "Observational evidence supports a root-cause hypothesis. "
+                        "Accept root cause (report-only) or escalate if residual risk remains. "
+                        "Do not require an intervention unless one was proposed."
+                    )
                 ),
                 allowed_event_types=[
-                    EventType.EXPERIMENT_PROPOSED.value,
+                    EventType.ROOT_CAUSE_ACCEPTED.value,
+                    EventType.UNKNOWN_RESOLVED.value,
                     EventType.INVESTIGATION_ESCALATED.value,
+                    EventType.HYPOTHESIS_REJECTED.value,
+                    EventType.HYPOTHESIS_SUSPENDED.value,
+                    EventType.HYPOTHESIS_PROMOTED.value,
+                    EventType.EXPERIMENT_PROPOSED.value,
                 ],
                 projection={
                     "candidate_hypothesis_id": best.id,
                     "hypotheses": _hyp_summary(state),
                     "interpretations": _interp_summary(state),
                     "metrics": _metrics_summary(state),
+                    "successful_fix": successful_fix,
+                    "report_only": not successful_fix,
                 },
                 hints=[
-                    "Prefer experiment_class=intervention with a patch when possible.",
-                    "Escalate only for groundbreaking, safety, or human-only blockers.",
+                    "Investigate skill: accept and write issues/<slug>.md; fix via incident skill.",
+                    "Incident skill: may still propose experiment_class=intervention before accept.",
                 ],
             )
         return Task(
             case_id=state.case_id,
-            role=AgentRole.JUDGE,
-            objective="Fix verified. Accept root cause or escalate if residual risk remains.",
+            role=AgentRole.ANALYST,
+            objective=(
+                "Evidence supports a root-cause hypothesis. A pending intervention exists — "
+                "refine or wait for approve/verify, or escalate if blocked."
+            ),
             allowed_event_types=[
-                EventType.ROOT_CAUSE_ACCEPTED.value,
-                EventType.UNKNOWN_RESOLVED.value,
+                EventType.EXPERIMENT_PROPOSED.value,
                 EventType.INVESTIGATION_ESCALATED.value,
-                EventType.HYPOTHESIS_REJECTED.value,
-                EventType.HYPOTHESIS_SUSPENDED.value,
-                EventType.HYPOTHESIS_PROMOTED.value,
             ],
             projection={
                 "candidate_hypothesis_id": best.id,
@@ -591,6 +639,10 @@ def schedule_next_task(state: CaseState) -> Task:
                 "interpretations": _interp_summary(state),
                 "metrics": _metrics_summary(state),
             },
+            hints=[
+                "Prefer completing the pending intervention verification before accept.",
+                "Escalate only for groundbreaking, safety, or human-only blockers.",
+            ],
         )
 
     # Starvation recovery — still counting toward stall escalation

@@ -179,6 +179,7 @@ def run_session_ttl_investigate(service: CaseService, issue_path: Path) -> dict:
                     ),
                     "assumptions": ["Tests control now= explicitly and consistently"],
                     "parent_id": None,
+                    "objection_category": "Alternative Hypothesis",
                 },
             ),
         ]
@@ -263,6 +264,7 @@ def run_session_ttl_investigate(service: CaseService, issue_path: Path) -> dict:
                     "evidence_id": ev_id,
                     "hypothesis_id": hyp_clock,
                     "outcome": "WEAKENS",
+                    "objection_category": "Missing Evidence",
                     "rationale": (
                         "Objection category: Missing Evidence — failing tests use explicit "
                         "monotonic now= sequences; no evidence of inconsistent clocks."
@@ -345,6 +347,7 @@ def run_session_ttl_investigate(service: CaseService, issue_path: Path) -> dict:
                     "evidence_id": fix_ev,
                     "hypothesis_id": hyp_clock,
                     "outcome": "WEAKENS",
+                    "objection_category": "Alternative Hypothesis",
                     "rationale": "Passing last_seen fix falsifies inconsistent-now alternative.",
                 },
             ),

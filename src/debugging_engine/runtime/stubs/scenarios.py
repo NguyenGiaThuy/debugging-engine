@@ -141,16 +141,30 @@ def scenario_starvation(service: CaseService, issue_path: Path) -> dict[str, Any
                     "unknown_id": unknown_id,
                     "title": "Competing unfalsifiable guess",
                     "explanation": "Also hard to test.",
+                    "objection_category": "Alternative Hypothesis",
                 },
             ),
         ]
     )
-    # Poll next until Judge asks to escalate (stall threshold)
+    # Poll next until stall offers escalation (Human first, then Judge).
     last_task = None
     for _ in range(STALL_CYCLES_BEFORE_ESCALATION + 5):
         last_task = service.next_task(case_id)
         if EventType.INVESTIGATION_ESCALATED.value in last_task.get("allowed_event_types", []):
             break
+    assert last_task is not None
+    if last_task["role"] == AgentRole.HUMAN.value:
+        service.submit(
+            [
+                _ev(
+                    case_id,
+                    EventType.HUMAN_RESPONSE_RECEIVED,
+                    AgentRole.HUMAN,
+                    {"message": "No further experiments available; escalate."},
+                )
+            ]
+        )
+        last_task = service.next_task(case_id)
     # Actually escalate
     service.submit(
         [
@@ -250,6 +264,7 @@ def scenario_evidence_bloat(service: CaseService, issue_path: Path) -> dict[str,
                         "unknown_id": unknown_id,
                         "title": "Alt",
                         "explanation": "Placeholder alt",
+                        "objection_category": "Alternative Hypothesis",
                     },
                 ),
             ]

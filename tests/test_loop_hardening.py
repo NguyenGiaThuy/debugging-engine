@@ -105,6 +105,7 @@ def _approve_after_adversary(svc: CaseService, case_id: str, eid: str) -> None:
                     "unknown_id": unk,
                     "title": "alt",
                     "explanation": "e",
+                    "objection_category": "Alternative Hypothesis",
                 },
             )
         ]

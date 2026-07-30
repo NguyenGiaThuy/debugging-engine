@@ -90,6 +90,7 @@ def _adversary_then_approve(svc: CaseService, case_id: str, eid: str) -> None:
                     "title": "alt",
                     "explanation": "e",
                     "assumptions": [],
+                    "objection_category": "Alternative Hypothesis",
                 },
             )
         ]
@@ -232,6 +233,7 @@ def test_analyst_cannot_self_approve_experiment(tmp_path: Path):
                     "title": "alt",
                     "explanation": "e",
                     "assumptions": [],
+                    "objection_category": "Alternative Hypothesis",
                 },
             )
         ]
@@ -341,6 +343,7 @@ def test_supports_promotes_proposed_hypothesis(tmp_path: Path):
                     "evidence_id": evid,
                     "hypothesis_id": hid,
                     "outcome": "INCONCLUSIVE",
+                    "objection_category": "Incomplete Explanation",
                     "rationale": "Need discriminating intervention before acceptance.",
                 },
             )
@@ -349,5 +352,7 @@ def test_supports_promotes_proposed_hypothesis(tmp_path: Path):
     st = svc.engine.project(case_id)
     assert st is not None
     task = schedule_next_task(st)
-    assert task.role == AgentRole.ANALYST
-    assert "intervention" in task.objective.lower()
+    # Report-only: no pending intervention → Judge may accept on observational evidence.
+    assert task.role == AgentRole.JUDGE
+    assert task.projection.get("report_only") is True
+    assert EventType.ROOT_CAUSE_ACCEPTED.value in task.allowed_event_types
