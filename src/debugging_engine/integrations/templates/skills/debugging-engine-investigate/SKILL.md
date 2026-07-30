@@ -54,10 +54,10 @@ open issue → next → (reason within role) → submit → next → …
 ### 1. Open
 
 ```bash
-debugging-engine open path/to/issue.md
+debugging-engine open path/to/issue.md --mode investigate
 ```
 
-If no issue file exists, create a short markdown under `issues/` (symptoms, success criteria) then open it.
+If no issue file exists, create a short markdown under `issues/` (symptoms, success criteria) then open it. Always use `--mode investigate` so the kernel rejects interventions.
 
 ### 2. Next (always)
 
@@ -65,7 +65,7 @@ If no issue file exists, create a short markdown under `issues/` (symptoms, succ
 debugging-engine next <case-id>
 ```
 
-Act as the assigned `role`. **First visible action after `next` is always the role announcement** (Analyst, Adversary, Verifier, Judge, Human). Format:
+Act as the assigned `role`. **First visible action after `next` is always the role announcement** (Analyst, Adversary, Verifier, Judge, Human). If the role is **Human**, announce, then **stop and ask the real user** — do not invent a `HumanResponseReceived`. Format:
 
 ```text
 **Role: <role>** — <objective>
@@ -105,7 +105,7 @@ Summarize for the user: unknown, accepted root cause (or escalation), key eviden
 ```python
 from debugging_engine import Case, Engine
 engine = Engine(repo_root=".")
-case = Case.open(engine, "issues/my-bug.md")
+case = Case.open(engine, "issues/my-bug.md", mode="investigate")
 task = case.next()
 ```
 

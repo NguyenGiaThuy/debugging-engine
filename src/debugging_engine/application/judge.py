@@ -9,11 +9,13 @@ from debugging_engine.domain.models import (
     AgentRole,
     CaseState,
     EventType,
+    Experiment,
     ExperimentCost,
     ExperimentStatus,
     HypothesisStatus,
     InformationGain,
     InterpretationOutcome,
+    InvestigationMode,
     InvestigationStatus,
 )
 from debugging_engine.domain.policies import (
@@ -140,6 +142,8 @@ def _metrics_summary(state: CaseState) -> dict[str, Any]:
     return {
         "event_count": state.event_count,
         "revision": state.revision,
+        "mode": state.mode.value,
+        "accepted_root_cause_id": state.accepted_root_cause_id,
         "unknowns": len(state.unknowns),
         "hypotheses": len(state.hypotheses),
         "experiments": len(state.experiments),
@@ -148,7 +152,49 @@ def _metrics_summary(state: CaseState) -> dict[str, Any]:
         "scheduling_cycles": state.decision_state.get("scheduling_cycles", 0),
         "stall_cycles": state.decision_state.get("stall_cycles", 0),
         "last_progress_revision": state.decision_state.get("last_progress_revision"),
+        "org_approved": bool(state.decision_state.get("org_approved")),
     }
+
+
+def _is_intervention(exp: Experiment) -> bool:
+    return exp.experiment_class == "intervention" or bool(exp.patch)
+
+
+def _risky_intervention(exp: Experiment) -> bool:
+    return _is_intervention(exp) and exp.cost in {
+        ExperimentCost.HIGH,
+        ExperimentCost.CRITICAL,
+    }
+
+
+def _successful_fix(state: CaseState) -> bool:
+    return any(
+        _is_intervention(e)
+        and e.status == ExperimentStatus.COMPLETED
+        and any(
+            ev.experiment_id == e.id and ev.attributes.get("passed") is True
+            for ev in state.evidence.values()
+        )
+        for e in state.experiments.values()
+    )
+
+
+def _pending_intervention(state: CaseState) -> bool:
+    return any(
+        _is_intervention(e)
+        and e.status
+        in {
+            ExperimentStatus.PROPOSED,
+            ExperimentStatus.APPROVED,
+            ExperimentStatus.SCHEDULED,
+            ExperimentStatus.RUNNING,
+        }
+        for e in state.experiments.values()
+    )
+
+
+def _cause_accepted(state: CaseState) -> bool:
+    return bool(state.accepted_root_cause_id or state.decision_state.get("root_cause_hypothesis_id"))
 
 
 def _slice_for_role(state: CaseState, role: AgentRole) -> dict:
@@ -157,6 +203,8 @@ def _slice_for_role(state: CaseState, role: AgentRole) -> dict:
         "case_id": state.case_id,
         "title": _short(state.title),
         "status": state.status.value,
+        "mode": state.mode.value,
+        "accepted_root_cause_id": state.accepted_root_cause_id,
         "issue_path": state.issue_path,
         "metrics": _metrics_summary(state),
     }
@@ -270,16 +318,9 @@ def schedule_next_task(state: CaseState) -> Task:
             terminal_status=state.status.value,
         )
 
-    if state.decision_state.get("root_cause_hypothesis_id"):
-        return Task(
-            case_id=state.case_id,
-            role=AgentRole.JUDGE,
-            objective="Root cause already accepted.",
-            allowed_event_types=[],
-            projection=_slice_for_role(state, AgentRole.JUDGE),
-            done=True,
-            terminal_status=InvestigationStatus.RESOLVED.value,
-        )
+    # Cause accepted but case still ACTIVE — drive fix / org / FixAccepted path.
+    if _cause_accepted(state) and state.status == InvestigationStatus.ACTIVE:
+        return _schedule_after_cause_accepted(state)
 
     stall = int(state.decision_state.get("stall_cycles", 0))
     if stall >= STALL_CYCLES_BEFORE_ESCALATION:
@@ -303,7 +344,8 @@ def schedule_next_task(state: CaseState) -> Task:
                 },
                 hints=[
                     ANNOUNCE_HANDOFF_HINT,
-                    "Submit HumanResponseReceived as producer Human.",
+                    "STOP: this is the real user. Ask them for guidance; do not invent a HumanResponse.",
+                    "After their reply, submit HumanResponseReceived as producer Human, or escalate.",
                     "Waiting indefinitely is prohibited (Part IV starvation policy).",
                 ],
             )
@@ -349,80 +391,14 @@ def schedule_next_task(state: CaseState) -> Task:
                 "Estimate information_gain and cost qualitatively.",
                 f"Active hypothesis budget per Unknown: {MAX_ACTIVE_HYPOTHESES_PER_UNKNOWN}.",
                 "Propose experiments as events only; running verify/patches requires Judge approval and role handoffs.",
+                f"Case mode={state.mode.value}.",
             ],
         )
 
     # Run already-approved experiments first so Verifier/Implementer are not starved.
-    runnable = [
-        e
-        for e in state.experiments.values()
-        if e.status in {ExperimentStatus.APPROVED, ExperimentStatus.SCHEDULED, ExperimentStatus.RUNNING}
-    ]
-    if runnable:
-        runnable.sort(key=lambda e: (-GAIN_RANK[e.information_gain], COST_RANK[e.cost]))
-        exp = runnable[0]
-        applied_ids = {
-            p.get("experiment_id")
-            for p in state.decision_state.get("patches", [])
-            if isinstance(p, dict)
-        }
-        if exp.patch and exp.id not in applied_ids:
-            return Task(
-                case_id=state.case_id,
-                role=AgentRole.IMPLEMENTER,
-                objective=(
-                    f"Materialize the approved patch for experiment '{exp.title}' ({exp.id}), "
-                    "then submit PatchApplied."
-                ),
-                allowed_event_types=[
-                    EventType.PATCH_APPLIED.value,
-                    EventType.IMPLEMENTATION_FAILED.value,
-                ],
-                projection={
-                    "experiment_id": exp.id,
-                    "experiment": {
-                        "id": exp.id,
-                        "title": _short(exp.title),
-                        "status": exp.status.value,
-                        "has_patch": True,
-                        "patch_paths": list(exp.patch.keys()),
-                    },
-                    "metrics": _metrics_summary(state),
-                },
-                hints=[
-                    ANNOUNCE_HANDOFF_HINT,
-                    "Announce this Implementer handoff in chat before writing files.",
-                    "Write patch files under the repo root exactly as specified.",
-                    "After PatchApplied, the next task should be Verifier.",
-                ],
-            )
-        return Task(
-            case_id=state.case_id,
-            role=AgentRole.VERIFIER,
-            objective=f"Run verification for experiment '{exp.title}' ({exp.id}) via `debugging-engine verify`.",
-            allowed_event_types=[
-                EventType.EXPERIMENT_STARTED.value,
-                EventType.EVIDENCE_RECORDED.value,
-                EventType.EXPERIMENT_COMPLETED.value,
-                EventType.VERIFICATION_FAILED.value,
-                EventType.PATCH_APPLIED.value,
-            ],
-            projection={
-                "experiment_id": exp.id,
-                "experiment": {
-                    "id": exp.id,
-                    "title": _short(exp.title),
-                    "status": exp.status.value,
-                    "has_patch": bool(exp.patch),
-                },
-                "metrics": _metrics_summary(state),
-            },
-            hints=[
-                ANNOUNCE_HANDOFF_HINT,
-                "Announce this Verifier handoff in chat before running verify.",
-                "Prefer `debugging-engine verify <case-id> <experiment-id>` rather than hand-writing evidence.",
-            ],
-        )
+    runnable_task = _schedule_runnable(state)
+    if runnable_task is not None:
+        return runnable_task
 
     # Dialectic before approving: Adversary must challenge when evidence is absent
     # and no Adversary turn has run yet (single-hyp OR multi-hyp batch with proposals).
@@ -471,45 +447,9 @@ def schedule_next_task(state: CaseState) -> Task:
             ],
         )
 
-    proposed = [e for e in state.experiments.values() if e.status == ExperimentStatus.PROPOSED]
-    if proposed:
-        unrebutted = unrebutted_supports_evidence_ids(state)
-        if unrebutted:
-            return _adversary_rebuttal_task(state, unrebutted)
-        proposed.sort(key=lambda e: (-GAIN_RANK[e.information_gain], COST_RANK[e.cost]))
-        best = proposed[0]
-        if best.information_gain == InformationGain.MINIMAL and best.cost == ExperimentCost.CRITICAL:
-            return Task(
-                case_id=state.case_id,
-                role=AgentRole.ANALYST,
-                objective="Previous experiment has MINIMAL gain and CRITICAL cost; propose a better experiment.",
-                allowed_event_types=[EventType.EXPERIMENT_PROPOSED.value],
-                projection=_slice_for_role(state, AgentRole.ANALYST),
-            )
-        return Task(
-            case_id=state.case_id,
-            role=AgentRole.JUDGE,
-            objective=f"Approve and prepare experiment '{best.title}' ({best.id}).",
-            allowed_event_types=[
-                EventType.EXPERIMENT_APPROVED.value,
-                EventType.EXPERIMENT_SCHEDULED.value,
-            ],
-            projection={
-                "recommended_experiment_id": best.id,
-                "experiment": {
-                    "id": best.id,
-                    "title": _short(best.title),
-                    "information_gain": best.information_gain.value,
-                    "cost": best.cost.value,
-                    "status": best.status.value,
-                },
-                "metrics": _metrics_summary(state),
-            },
-            hints=[
-                ANNOUNCE_HANDOFF_HINT,
-                "Submit ExperimentApproved then optionally ExperimentScheduled.",
-            ],
-        )
+    proposed_task = _schedule_proposed_approval(state)
+    if proposed_task is not None:
+        return proposed_task
 
     completed = [
         e
@@ -585,41 +525,17 @@ def schedule_next_task(state: CaseState) -> Task:
     ]
     if supported and state.evidence:
         best = supported[0]
-        successful_fix = any(
-            (e.experiment_class == "intervention" or bool(e.patch))
-            and e.status == ExperimentStatus.COMPLETED
-            and any(
-                ev.experiment_id == e.id and ev.attributes.get("passed") is True
-                for ev in state.evidence.values()
-            )
-            for e in state.experiments.values()
-        )
-        pending_intervention = any(
-            (e.experiment_class == "intervention" or bool(e.patch))
-            and e.status
-            in {
-                ExperimentStatus.PROPOSED,
-                ExperimentStatus.APPROVED,
-                ExperimentStatus.SCHEDULED,
-                ExperimentStatus.RUNNING,
-            }
-            for e in state.experiments.values()
-        )
-        # Report-only path: observational evidence is enough to accept when no
-        # intervention was proposed (investigate skill). Incident skill proposes
-        # interventions explicitly before this branch is reached for approve/run.
+        successful_fix = _successful_fix(state)
+        pending_intervention = _pending_intervention(state)
+        # Cause-accept path (M2): observational evidence is enough for RootCauseAccepted.
+        # Interventions are required later via FixAccepted for incident/production.
         if successful_fix or not pending_intervention:
             return Task(
                 case_id=state.case_id,
                 role=AgentRole.JUDGE,
                 objective=(
-                    "Fix verified. Accept root cause or escalate if residual risk remains."
-                    if successful_fix
-                    else (
-                        "Observational evidence supports a root-cause hypothesis. "
-                        "Accept root cause (report-only) or escalate if residual risk remains. "
-                        "Do not require an intervention unless one was proposed."
-                    )
+                    "Evidence supports a root-cause hypothesis. Accept root cause "
+                    "(FixAccepted comes after a verified intervention when required)."
                 ),
                 allowed_event_types=[
                     EventType.ROOT_CAUSE_ACCEPTED.value,
@@ -636,12 +552,14 @@ def schedule_next_task(state: CaseState) -> Task:
                     "interpretations": _interp_summary(state),
                     "metrics": _metrics_summary(state),
                     "successful_fix": successful_fix,
-                    "report_only": not successful_fix,
+                    "mode": state.mode.value,
+                    "report_only": state.mode == InvestigationMode.INVESTIGATE
+                    or not _pending_intervention(state),
                 },
                 hints=[
                     ANNOUNCE_HANDOFF_HINT,
-                    "Investigate skill: accept and write issues/<slug>.md; fix via incident skill.",
-                    "Incident skill: may still propose experiment_class=intervention before accept.",
+                    "investigate: RootCauseAccepted resolves. "
+                    "incident/production with interventions: RootCauseAccepted then FixAccepted.",
                 ],
             )
         return Task(
@@ -663,7 +581,7 @@ def schedule_next_task(state: CaseState) -> Task:
             },
             hints=[
                 ANNOUNCE_HANDOFF_HINT,
-                "Prefer completing the pending intervention verification before accept.",
+                "Prefer completing the pending intervention, or accept root cause via Judge when scheduled.",
                 "Escalate only for groundbreaking, safety, or human-only blockers.",
             ],
         )
@@ -684,6 +602,244 @@ def schedule_next_task(state: CaseState) -> Task:
             "Starvation policy: waiting indefinitely is prohibited.",
             "Escalate only for groundbreaking, safety, or human-only blockers.",
         ],
+    )
+
+
+def _schedule_runnable(state: CaseState) -> Task | None:
+    runnable = [
+        e
+        for e in state.experiments.values()
+        if e.status in {ExperimentStatus.APPROVED, ExperimentStatus.SCHEDULED, ExperimentStatus.RUNNING}
+    ]
+    if not runnable:
+        return None
+    if state.mode == InvestigationMode.INVESTIGATE:
+        runnable = [e for e in runnable if not _is_intervention(e)]
+        if not runnable:
+            return None
+    runnable.sort(key=lambda e: (-GAIN_RANK[e.information_gain], COST_RANK[e.cost]))
+    exp = runnable[0]
+    applied_ids = {
+        p.get("experiment_id")
+        for p in state.decision_state.get("patches", [])
+        if isinstance(p, dict)
+    }
+    if exp.patch and exp.id not in applied_ids:
+        return Task(
+            case_id=state.case_id,
+            role=AgentRole.IMPLEMENTER,
+            objective=(
+                f"Materialize the approved patch for experiment '{exp.title}' ({exp.id}), "
+                "then submit PatchApplied."
+            ),
+            allowed_event_types=[
+                EventType.PATCH_APPLIED.value,
+                EventType.IMPLEMENTATION_FAILED.value,
+            ],
+            projection={
+                "experiment_id": exp.id,
+                "experiment": {
+                    "id": exp.id,
+                    "title": _short(exp.title),
+                    "status": exp.status.value,
+                    "has_patch": True,
+                    "patch_paths": list(exp.patch.keys()),
+                },
+                "metrics": _metrics_summary(state),
+            },
+            hints=[
+                ANNOUNCE_HANDOFF_HINT,
+                "Announce this Implementer handoff in chat before writing files.",
+                "Write patch files under the repo root exactly as specified.",
+                "After PatchApplied, the next task should be Verifier.",
+            ],
+        )
+    return Task(
+        case_id=state.case_id,
+        role=AgentRole.VERIFIER,
+        objective=f"Run verification for experiment '{exp.title}' ({exp.id}) via `debugging-engine verify`.",
+        allowed_event_types=[
+            EventType.EXPERIMENT_STARTED.value,
+            EventType.EVIDENCE_RECORDED.value,
+            EventType.EXPERIMENT_COMPLETED.value,
+            EventType.VERIFICATION_FAILED.value,
+            EventType.PATCH_APPLIED.value,
+        ],
+        projection={
+            "experiment_id": exp.id,
+            "experiment": {
+                "id": exp.id,
+                "title": _short(exp.title),
+                "status": exp.status.value,
+                "has_patch": bool(exp.patch),
+            },
+            "metrics": _metrics_summary(state),
+        },
+        hints=[
+            ANNOUNCE_HANDOFF_HINT,
+            "Announce this Verifier handoff in chat before running verify.",
+            "Prefer `debugging-engine verify <case-id> <experiment-id>` rather than hand-writing evidence.",
+        ],
+    )
+
+
+def _schedule_proposed_approval(state: CaseState) -> Task | None:
+    proposed = [e for e in state.experiments.values() if e.status == ExperimentStatus.PROPOSED]
+    if not proposed:
+        return None
+    unrebutted = unrebutted_supports_evidence_ids(state)
+    if unrebutted:
+        return _adversary_rebuttal_task(state, unrebutted)
+    proposed.sort(key=lambda e: (-GAIN_RANK[e.information_gain], COST_RANK[e.cost]))
+    best = proposed[0]
+    if best.information_gain == InformationGain.MINIMAL and best.cost == ExperimentCost.CRITICAL:
+        return Task(
+            case_id=state.case_id,
+            role=AgentRole.ANALYST,
+            objective="Previous experiment has MINIMAL gain and CRITICAL cost; propose a better experiment.",
+            allowed_event_types=[EventType.EXPERIMENT_PROPOSED.value],
+            projection=_slice_for_role(state, AgentRole.ANALYST),
+        )
+    approvals = state.decision_state.get("intervention_approvals") or {}
+    if (
+        state.mode == InvestigationMode.PRODUCTION
+        and _risky_intervention(best)
+        and approvals.get(best.id) != "approve"
+    ):
+        return Task(
+            case_id=state.case_id,
+            role=AgentRole.HUMAN,
+            objective=(
+                f"Production mode: approve HIGH/CRITICAL intervention '{best.title}' "
+                f"({best.id}) before Judge ExperimentApproved."
+            ),
+            allowed_event_types=[
+                EventType.HUMAN_RESPONSE_RECEIVED.value,
+                EventType.INVESTIGATION_ESCALATED.value,
+            ],
+            projection={
+                "recommended_experiment_id": best.id,
+                "experiment": {
+                    "id": best.id,
+                    "title": _short(best.title),
+                    "information_gain": best.information_gain.value,
+                    "cost": best.cost.value,
+                    "status": best.status.value,
+                    "experiment_class": best.experiment_class,
+                },
+                "metrics": _metrics_summary(state),
+            },
+            hints=[
+                ANNOUNCE_HANDOFF_HINT,
+                "STOP: this is the real user, not the coding agent. Do not submit Human events yourself.",
+                "Ask the user to approve/reject, or run: "
+                "`debugging-engine human-approve <case-id> <experiment-id> --decision approve|reject`.",
+            ],
+        )
+    return Task(
+        case_id=state.case_id,
+        role=AgentRole.JUDGE,
+        objective=f"Approve and prepare experiment '{best.title}' ({best.id}).",
+        allowed_event_types=[
+            EventType.EXPERIMENT_APPROVED.value,
+            EventType.EXPERIMENT_SCHEDULED.value,
+        ],
+        projection={
+            "recommended_experiment_id": best.id,
+            "experiment": {
+                "id": best.id,
+                "title": _short(best.title),
+                "information_gain": best.information_gain.value,
+                "cost": best.cost.value,
+                "status": best.status.value,
+            },
+            "metrics": _metrics_summary(state),
+        },
+        hints=[
+            ANNOUNCE_HANDOFF_HINT,
+            "Submit ExperimentApproved then optionally ExperimentScheduled.",
+        ],
+    )
+
+
+def _schedule_after_cause_accepted(state: CaseState) -> Task:
+    """Active case with accepted root cause — finish fix / org / FixAccepted."""
+    runnable_task = _schedule_runnable(state)
+    if runnable_task is not None:
+        return runnable_task
+
+    proposed_task = _schedule_proposed_approval(state)
+    if proposed_task is not None:
+        return proposed_task
+
+    if _successful_fix(state):
+        if state.mode == InvestigationMode.PRODUCTION and not state.decision_state.get(
+            "org_approved"
+        ):
+            return Task(
+                case_id=state.case_id,
+                role=AgentRole.HUMAN,
+                objective=(
+                    "Production mode: org approval required before FixAccepted. "
+                    "Submit OrgApprovalReceived."
+                ),
+                allowed_event_types=[
+                    EventType.ORG_APPROVAL_RECEIVED.value,
+                    EventType.INVESTIGATION_ESCALATED.value,
+                ],
+                projection=_slice_for_role(state, AgentRole.HUMAN),
+                hints=[
+                    ANNOUNCE_HANDOFF_HINT,
+                    "STOP: this is the real user, not the coding agent. Do not submit OrgApproval yourself.",
+                    "Ask the user, or run: `debugging-engine org-approve <case-id>`.",
+                ],
+            )
+        return Task(
+            case_id=state.case_id,
+            role=AgentRole.JUDGE,
+            objective="Cause accepted and fix verified. Submit FixAccepted to resolve.",
+            allowed_event_types=[
+                EventType.FIX_ACCEPTED.value,
+                EventType.INVESTIGATION_ESCALATED.value,
+            ],
+            projection={
+                **_slice_for_role(state, AgentRole.JUDGE),
+                "accepted_root_cause_id": state.accepted_root_cause_id,
+            },
+            hints=[
+                ANNOUNCE_HANDOFF_HINT,
+                "FixAccepted requires authority Judge and a successful intervention.",
+            ],
+        )
+
+    # Production / incident still need an intervention after cause accept.
+    if state.mode in {InvestigationMode.INCIDENT, InvestigationMode.PRODUCTION}:
+        return Task(
+            case_id=state.case_id,
+            role=AgentRole.ANALYST,
+            objective=(
+                "Root cause accepted. Propose an intervention experiment (with patch) "
+                "to verify the fix, or escalate if blocked."
+            ),
+            allowed_event_types=[
+                EventType.EXPERIMENT_PROPOSED.value,
+                EventType.INVESTIGATION_ESCALATED.value,
+            ],
+            projection=_slice_for_role(state, AgentRole.ANALYST),
+            hints=[
+                ANNOUNCE_HANDOFF_HINT,
+                f"Mode={state.mode.value}: FixAccepted is required after a verified intervention.",
+                "Mark production/risky interventions cost HIGH or CRITICAL.",
+            ],
+        )
+
+    return Task(
+        case_id=state.case_id,
+        role=AgentRole.JUDGE,
+        objective="Root cause accepted; investigation should already be resolved.",
+        allowed_event_types=[EventType.INVESTIGATION_ESCALATED.value],
+        projection=_slice_for_role(state, AgentRole.JUDGE),
+        hints=[ANNOUNCE_HANDOFF_HINT],
     )
 
 

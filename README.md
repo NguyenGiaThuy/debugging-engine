@@ -1,6 +1,6 @@
 # Debugging Engine
 
-**Package:** `debugging-engine` **1.0.9** (PyPI / CLI). Architecture spec remains **Debugging Engine v1.0.0** — see [`docs/SPECIFICATION.md`](docs/SPECIFICATION.md) and [`CHANGELOG.md`](CHANGELOG.md).
+**Package:** `debugging-engine` **1.0.11** (PyPI / CLI). Architecture spec remains **Debugging Engine v1.0.0** — see [`docs/SPECIFICATION.md`](docs/SPECIFICATION.md) and [`CHANGELOG.md`](CHANGELOG.md).
 
 **Debugging Engine** (State Machine–Driven Agentic Debugging Workflow) is an **investigation kernel**, not a chat agent.
 
@@ -72,10 +72,12 @@ debugging-engine uninstall-cli    # uv tool uninstall debugging-engine
 ## CLI
 
 ```bash
-debugging-engine open <issue.md>
+debugging-engine open <issue.md> [--mode investigate|incident|production]
 debugging-engine next <case-id>
 debugging-engine submit <case-id> --events events.json
 debugging-engine verify <case-id> <experiment-id>
+debugging-engine human-approve <case-id> <experiment-id> [--decision approve|reject]
+debugging-engine org-approve <case-id> [--rationale "…"]
 debugging-engine status|log|replay <case-id>
 debugging-engine query <case-id> [slice]
 
@@ -101,9 +103,9 @@ Full surface: [`docs/api.md`](docs/api.md).
 Architecture specification **Debugging Engine v1.0.0**: [`docs/SPECIFICATION.md`](docs/SPECIFICATION.md).
 Package release notes: [`CHANGELOG.md`](CHANGELOG.md).
 
-The published kernel implements **serial** Judge scheduling (one Task at a time). Spec §10 parallel experiment execution is architectural capability, **not** implemented in package 1.0.9.
+The published kernel implements **serial** Judge scheduling (one Task at a time). Spec §10 parallel experiment execution is architectural capability, **not** implemented in package 1.0.11.
 
-Skills: `/debugging-engine-investigate` is **report-only** (write `issues/`, no Implementer). `/debugging-engine-incident` owns the fix loop.
+Skills: `/debugging-engine-investigate` opens with `--mode investigate` (report-only). `/debugging-engine-incident` uses `--mode incident` or `--mode production` (Human + org gates; `RootCauseAccepted` then `FixAccepted`).
 
 | Parts | Status |
 | --- | --- |

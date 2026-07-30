@@ -306,7 +306,24 @@ def run_stub_investigation(service: CaseService, issue_path: Path) -> dict:
                 ),
             ]
         )
+        task = service.next_task(case_id)
+        assert task["role"] == AgentRole.JUDGE.value
+        assert EventType.FIX_ACCEPTED.value in task["allowed_event_types"]
+        service.submit(
+            [
+                _event(
+                    case_id,
+                    EventType.FIX_ACCEPTED,
+                    AgentRole.JUDGE,
+                    {
+                        "rationale": "Intervention verified; accept the fix.",
+                        "authority": "Judge",
+                    },
+                ),
+            ]
+        )
         steps.append("root_cause_accepted")
+        steps.append("fix_accepted")
     else:
         task = service.next_task(case_id)
         # Escalation may be offered on Judge or Analyst stall tasks.

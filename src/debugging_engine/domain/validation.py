@@ -10,11 +10,13 @@ from debugging_engine.domain.models import (
     EventType,
     Evidence,
     Experiment,
+    ExperimentCost,
     ExperimentStatus,
     Hypothesis,
     HypothesisStatus,
     Interpretation,
     InterpretationOutcome,
+    InvestigationMode,
     InvestigationStatus,
     ObjectionCategory,
     Unknown,
@@ -38,6 +40,44 @@ class ValidationError(Exception):
         self.details = details or {}
 
 
+def _is_intervention(exp: Experiment | dict[str, Any]) -> bool:
+    if isinstance(exp, Experiment):
+        return exp.experiment_class == "intervention" or bool(exp.patch)
+    return exp.get("experiment_class") == "intervention" or bool(exp.get("patch"))
+
+
+def _has_intervention_experiments(state: CaseState) -> bool:
+    return any(_is_intervention(e) for e in state.experiments.values())
+
+
+def _passed_intervention(state: CaseState) -> bool:
+    return any(
+        _is_intervention(e)
+        and e.status == ExperimentStatus.COMPLETED
+        and any(
+            ev.experiment_id == e.id and ev.attributes.get("passed") is True
+            for ev in state.evidence.values()
+        )
+        for e in state.experiments.values()
+    )
+
+
+def _rca_resolves_immediately(state: CaseState) -> bool:
+    """Investigate always resolves on RCA; incident resolves when no interventions exist."""
+    if state.mode == InvestigationMode.INVESTIGATE:
+        return True
+    if state.mode == InvestigationMode.PRODUCTION:
+        return False
+    return not _has_intervention_experiments(state)
+
+
+def _risky_intervention(exp: Experiment) -> bool:
+    return _is_intervention(exp) and exp.cost in {
+        ExperimentCost.HIGH,
+        ExperimentCost.CRITICAL,
+    }
+
+
 def validate_event(state: CaseState | None, event: DomainEvent) -> None:
     """Validate event against current Case State before append."""
     et = event.event_type
@@ -48,6 +88,14 @@ def validate_event(state: CaseState | None, event: DomainEvent) -> None:
             raise ValidationError("Case already exists")
         if not payload.get("title"):
             raise ValidationError("CaseCreated requires title")
+        mode = payload.get("mode", InvestigationMode.INCIDENT.value)
+        try:
+            InvestigationMode(mode)
+        except ValueError as exc:
+            raise ValidationError(
+                f"Invalid investigation mode {mode}",
+                {"allowed": [m.value for m in InvestigationMode]},
+            ) from exc
         return
 
     if state is None:
@@ -99,6 +147,35 @@ def validate_event(state: CaseState | None, event: DomainEvent) -> None:
             )
         if not payload.get("message"):
             raise ValidationError("HumanResponseReceived requires message")
+        decision = payload.get("decision")
+        approval_for = payload.get("approval_for")
+        if decision is not None or approval_for is not None:
+            if not approval_for:
+                raise ValidationError(
+                    "HumanResponseReceived decision requires approval_for experiment_id"
+                )
+            if approval_for not in state.experiments:
+                raise ValidationError(
+                    "HumanResponseReceived approval_for must be an existing experiment",
+                    {"approval_for": approval_for},
+                )
+            if decision not in {"approve", "reject"}:
+                raise ValidationError(
+                    "HumanResponseReceived decision must be approve or reject",
+                    {"decision": decision},
+                )
+        return
+
+    if et == EventType.ORG_APPROVAL_RECEIVED:
+        if event.producer != AgentRole.HUMAN:
+            raise ValidationError(
+                "OrgApprovalReceived requires producer Human",
+                {"producer": event.producer},
+            )
+        if payload.get("approved") is not True:
+            raise ValidationError("OrgApprovalReceived requires approved: true")
+        if not payload.get("rationale") and not payload.get("message"):
+            raise ValidationError("OrgApprovalReceived requires rationale or message")
         return
 
     if et == EventType.KNOWLEDGE_VALIDATED:
@@ -201,6 +278,11 @@ def validate_event(state: CaseState | None, event: DomainEvent) -> None:
                         "ExperimentProposed patch paths must be relative and contained",
                         {"path": rel},
                     )
+        if state.mode == InvestigationMode.INVESTIGATE and _is_intervention(payload):
+            raise ValidationError(
+                "investigate mode forbids intervention experiments and patches",
+                {"mode": state.mode.value},
+            )
         return
 
     if et == EventType.EXPERIMENT_APPROVED:
@@ -221,6 +303,22 @@ def validate_event(state: CaseState | None, event: DomainEvent) -> None:
         exp = state.experiments[eid]
         if not can_transition_experiment(exp.status, ExperimentStatus.APPROVED):
             raise ValidationError(f"Invalid experiment transition {exp.status} -> APPROVED")
+        if state.mode == InvestigationMode.INVESTIGATE and _is_intervention(exp):
+            raise ValidationError(
+                "investigate mode forbids approving intervention experiments",
+                {"experiment_id": eid},
+            )
+        if state.mode == InvestigationMode.PRODUCTION and _risky_intervention(exp):
+            approvals = state.decision_state.get("intervention_approvals") or {}
+            if approvals.get(eid) != "approve":
+                raise ValidationError(
+                    "production mode requires Human approve for HIGH/CRITICAL interventions",
+                    {
+                        "experiment_id": eid,
+                        "cost": exp.cost.value,
+                        "hint": "Submit HumanResponseReceived with approval_for and decision=approve",
+                    },
+                )
         return
 
     if et == EventType.EXPERIMENT_SCHEDULED:
@@ -354,27 +452,6 @@ def validate_event(state: CaseState | None, event: DomainEvent) -> None:
                 {"hypothesis_id": hid},
             )
 
-        # Code-fix / patched path: require a successful intervention experiment.
-        needs_intervention = any(
-            e.experiment_class == "intervention" or bool(e.patch)
-            for e in state.experiments.values()
-        )
-        if needs_intervention:
-            passed_intervention = any(
-                (e.experiment_class == "intervention" or bool(e.patch))
-                and e.status == ExperimentStatus.COMPLETED
-                and any(
-                    ev.experiment_id == e.id and ev.attributes.get("passed") is True
-                    for ev in state.evidence.values()
-                )
-                for e in state.experiments.values()
-            )
-            if not passed_intervention:
-                raise ValidationError(
-                    "RootCauseAccepted requires a successful intervention experiment",
-                    {"hypothesis_id": hid},
-                )
-
         # Competing active hypotheses must be disposed (rejected/suspended/accepted).
         active_competitors = [
             h
@@ -385,6 +462,38 @@ def validate_event(state: CaseState | None, event: DomainEvent) -> None:
             raise ValidationError(
                 "RootCauseAccepted requires competing hypotheses to be rejected or suspended",
                 {"active_competitors": [h.id for h in active_competitors]},
+            )
+        return
+
+    if et == EventType.FIX_ACCEPTED:
+        if event.producer != AgentRole.JUDGE:
+            raise ValidationError(
+                "FixAccepted requires producer Judge",
+                {"producer": event.producer},
+            )
+        if payload.get("authority") != AgentRole.JUDGE:
+            raise ValidationError(
+                "FixAccepted requires authority Judge",
+                {"authority": payload.get("authority")},
+            )
+        if not state.accepted_root_cause_id and not state.decision_state.get(
+            "root_cause_hypothesis_id"
+        ):
+            raise ValidationError(
+                "FixAccepted requires RootCauseAccepted first",
+            )
+        if not payload.get("rationale"):
+            raise ValidationError("FixAccepted requires rationale")
+        if not _passed_intervention(state):
+            raise ValidationError(
+                "FixAccepted requires a successful intervention experiment",
+            )
+        if state.mode == InvestigationMode.PRODUCTION and not state.decision_state.get(
+            "org_approved"
+        ):
+            raise ValidationError(
+                "production mode FixAccepted requires OrgApprovalReceived first",
+                {"mode": state.mode.value},
             )
         return
 
@@ -429,7 +538,6 @@ def validate_event(state: CaseState | None, event: DomainEvent) -> None:
         EventType.EXPERIMENT_EXPIRED,
         EventType.INTERPRETATION_WITHDRAWN,
         EventType.UNKNOWN_REOPENED,
-        EventType.HUMAN_RESPONSE_RECEIVED,
         EventType.KNOWLEDGE_VALIDATED,
     }:
         return
@@ -444,10 +552,12 @@ def apply_event(state: CaseState | None, event: DomainEvent) -> CaseState:
     payload = event.payload
 
     if et == EventType.CASE_CREATED:
+        mode_raw = payload.get("mode", InvestigationMode.INCIDENT.value)
         new_state = CaseState(
             case_id=event.case_id,
             title=payload["title"],
             issue_path=payload.get("issue_path"),
+            mode=InvestigationMode(mode_raw),
             status=InvestigationStatus.CREATED,
             event_count=1,
             revision=1,
@@ -655,10 +765,23 @@ def apply_event(state: CaseState | None, event: DomainEvent) -> CaseState:
             {
                 "message": payload.get("message"),
                 "timestamp": event.timestamp,
+                "approval_for": payload.get("approval_for"),
+                "decision": payload.get("decision"),
                 "attributes": payload.get("attributes", {}),
             }
         )
         s.decision_state["human_responses"] = responses
+        approval_for = payload.get("approval_for")
+        decision = payload.get("decision")
+        if approval_for and decision:
+            approvals = dict(s.decision_state.get("intervention_approvals") or {})
+            approvals[approval_for] = decision
+            s.decision_state["intervention_approvals"] = approvals
+    elif et == EventType.ORG_APPROVAL_RECEIVED:
+        s.decision_state["org_approved"] = True
+        s.decision_state["org_approval_rationale"] = payload.get("rationale") or payload.get(
+            "message"
+        )
     elif et == EventType.KNOWLEDGE_VALIDATED:
         items = list(s.decision_state.get("knowledge", []))
         items.append(
@@ -672,9 +795,19 @@ def apply_event(state: CaseState | None, event: DomainEvent) -> CaseState:
     elif et == EventType.ROOT_CAUSE_ACCEPTED:
         s.decision_state["root_cause_hypothesis_id"] = payload["hypothesis_id"]
         s.decision_state["root_cause_rationale"] = payload["rationale"]
+        s.accepted_root_cause_id = payload["hypothesis_id"]
         hyp = s.hypotheses[payload["hypothesis_id"]]
         hyp.status = HypothesisStatus.ACCEPTED
         hyp.revision += 1
+        if _rca_resolves_immediately(s):
+            s.status = InvestigationStatus.RESOLVED
+            s.decision_state["fix_accepted"] = False
+        else:
+            s.decision_state["awaiting_fix"] = True
+    elif et == EventType.FIX_ACCEPTED:
+        s.decision_state["fix_accepted"] = True
+        s.decision_state["fix_accepted_rationale"] = payload.get("rationale")
+        s.decision_state.pop("awaiting_fix", None)
         s.status = InvestigationStatus.RESOLVED
     elif et == EventType.PATCH_APPLIED:
         s.decision_state.setdefault("patches", []).append(payload)

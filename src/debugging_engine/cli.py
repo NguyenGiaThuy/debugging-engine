@@ -140,13 +140,21 @@ def uninstall_cli() -> None:
 @app.command()
 def open(
     issue: Path = typer.Argument(..., help="Path to issue markdown file"),
+    mode: str = typer.Option(
+        "incident",
+        "--mode",
+        help="Investigation mode: investigate | incident | production",
+    ),
 ) -> None:
     """Create a Case + Unknown from an issue file."""
     path = issue if issue.is_absolute() else repo_root() / issue
     if not path.exists():
         raise typer.BadParameter(f"Issue not found: {path}")
-    case = Case.open(engine(), path)
-    console.print({"case_id": case.case_id})
+    try:
+        case = Case.open(engine(), path, mode=mode)
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc)) from exc
+    console.print({"case_id": case.case_id, "mode": mode})
 
 
 @app.command("next")
@@ -198,6 +206,48 @@ def verify(case_id: str, experiment_id: str) -> None:
     except (KeyError, ValueError, RuntimeError) as exc:
         console.print(f"[red]{exc}[/red]")
         raise typer.Exit(code=1) from exc
+
+
+@app.command("human-approve")
+def human_approve(
+    case_id: str,
+    experiment_id: str,
+    decision: str = typer.Option("approve", "--decision", help="approve | reject"),
+    message: str = typer.Option("", "--message", help="Optional approval note"),
+) -> None:
+    """Record a real-user approval/rejection for a HIGH/CRITICAL intervention."""
+    try:
+        print_json(
+            data=Case.load(engine(), case_id).human_approve(
+                experiment_id,
+                decision=decision,
+                message=message,
+            )
+        )
+    except KeyError:
+        raise typer.Exit(code=1) from None
+    except ValidationError as exc:
+        console.print(f"[red]ValidationFailed[/red]: {exc}")
+        raise typer.Exit(code=2) from exc
+
+
+@app.command("org-approve")
+def org_approve(
+    case_id: str,
+    rationale: str = typer.Option(
+        "Organizational approval granted",
+        "--rationale",
+        help="Approval rationale",
+    ),
+) -> None:
+    """Record real-user org approval before FixAccepted (production mode)."""
+    try:
+        print_json(data=Case.load(engine(), case_id).org_approve(rationale=rationale))
+    except KeyError:
+        raise typer.Exit(code=1) from None
+    except ValidationError as exc:
+        console.print(f"[red]ValidationFailed[/red]: {exc}")
+        raise typer.Exit(code=2) from exc
 
 
 @app.command()

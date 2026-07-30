@@ -389,6 +389,23 @@ def run_session_ttl_investigate(service: CaseService, issue_path: Path) -> dict:
         ]
     )
 
+    task = announce(service.next_task(case_id))
+    assert task["role"] == AgentRole.JUDGE.value
+    assert EventType.FIX_ACCEPTED.value in task["allowed_event_types"]
+    service.submit(
+        [
+            _event(
+                case_id,
+                EventType.FIX_ACCEPTED,
+                AgentRole.JUDGE,
+                {
+                    "rationale": "Intervention verified; accept the fix.",
+                    "authority": "Judge",
+                },
+            ),
+        ]
+    )
+
     final = service.status(case_id)
     return {
         "case_id": case_id,

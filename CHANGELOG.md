@@ -4,6 +4,24 @@ All notable changes to the **debugging-engine** package are recorded here.
 The architecture specification remains **Debugging Engine v1.0.0** (`docs/SPECIFICATION.md`);
 package versions below are kernel / CLI releases that implement subsets of that spec.
 
+## [1.0.11] — 2026-07-30
+
+### Changed
+- Human production gates are **real-user only**: skills/Judge hints require the agent to stop and ask; do not auto-submit Human/OrgApproval events.
+- CLI: `human-approve` and `org-approve` for explicit user approvals.
+
+## [1.0.10] — 2026-07-30
+
+### Added
+- **M1–M3 investigation modes:** `open --mode investigate|incident|production` (default `incident`).
+- `FixAccepted` and `OrgApprovalReceived` events; Case State tracks `mode` and `accepted_root_cause_id`.
+- Production: Human `approval_for` + `decision=approve` required before approving HIGH/CRITICAL interventions; org approval required before `FixAccepted`.
+- Incident scene `issues/010` + `scenes/retry_budget/` for production-mode practice.
+
+### Changed
+- `RootCauseAccepted` proves cause only; resolves immediately in `investigate` (or incident with no interventions). Fix path completes via `FixAccepted`.
+- Investigate mode rejects intervention/patch experiments at propose/approve.
+
 ## [1.0.9] — 2026-07-30
 
 ### Changed

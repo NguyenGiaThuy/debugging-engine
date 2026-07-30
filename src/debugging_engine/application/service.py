@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from debugging_engine.application.judge import Task
-from debugging_engine.domain.models import AgentRole, DomainEvent, EventType, new_id
+from debugging_engine.domain.models import AgentRole, DomainEvent, EventType, InvestigationMode, new_id
 from debugging_engine.domain.validation import ValidationError
 from debugging_engine.infrastructure.store import JsonlEventStore, ProjectionEngine, dump_case_summary, query_case
 from debugging_engine.infrastructure.verify import run_verification
@@ -34,6 +34,9 @@ PROGRESS_EVENT_TYPES = {
     EventType.EVIDENCE_RECORDED,
     EventType.INTERPRETATION_SUBMITTED,
     EventType.ROOT_CAUSE_ACCEPTED,
+    EventType.FIX_ACCEPTED,
+    EventType.ORG_APPROVAL_RECEIVED,
+    EventType.HUMAN_RESPONSE_RECEIVED,
     EventType.PATCH_APPLIED,
     EventType.VERIFICATION_FAILED,
 }
@@ -163,7 +166,12 @@ class CaseService:
             summary.setdefault("decision_state", {})["last_task"] = meta["last_task"]
         return summary
 
-    def open_issue(self, issue_path: Path) -> tuple[str, list[DomainEvent]]:
+    def open_issue(
+        self,
+        issue_path: Path,
+        *,
+        mode: InvestigationMode | str = InvestigationMode.INCIDENT,
+    ) -> tuple[str, list[DomainEvent]]:
         text = issue_path.read_text(encoding="utf-8")
         title = next(
             (line[2:].strip() for line in text.splitlines() if line.startswith("# ")),
@@ -171,6 +179,9 @@ class CaseService:
         )
         case_id = new_id()
         unknown_id = new_id()
+        mode_value = mode.value if isinstance(mode, InvestigationMode) else str(mode)
+        # Validate early for clearer CLI errors.
+        InvestigationMode(mode_value)
         events = [
             DomainEvent(
                 case_id=case_id,
@@ -180,6 +191,7 @@ class CaseService:
                 payload={
                     "title": title,
                     "issue_path": str(issue_path.as_posix()),
+                    "mode": mode_value,
                 },
             ),
             DomainEvent(
@@ -259,6 +271,14 @@ class CaseService:
         self._enforce_task_allowed(case_id, events)
         state = self.engine.append_many(events)
         progress = any(e.event_type in PROGRESS_EVENT_TYPES for e in events)
+        # Stall guidance HumanResponse (no approval_for) must not reset the stall counter,
+        # otherwise Judge never reaches post-Human escalation.
+        if progress and all(
+            e.event_type == EventType.HUMAN_RESPONSE_RECEIVED
+            and not (e.payload or {}).get("approval_for")
+            for e in events
+        ):
+            progress = False
         self._bump_cycles(case_id, progress=progress)
         return self._merge_meta_into_summary(case_id, dump_case_summary(state))
 
@@ -286,3 +306,81 @@ class CaseService:
         if state is None:
             raise KeyError(case_id)
         return dump_case_full(state)
+
+    def _force_human_task(self, case_id: str, allowed: list[str], objective: str) -> None:
+        self._write_meta(
+            case_id,
+            {
+                **self._read_meta(case_id),
+                "last_task": {
+                    "role": AgentRole.HUMAN.value,
+                    "allowed_event_types": allowed,
+                    "done": False,
+                    "objective": objective,
+                },
+            },
+        )
+
+    def human_approve_intervention(
+        self,
+        case_id: str,
+        experiment_id: str,
+        *,
+        decision: str = "approve",
+        message: str = "",
+    ) -> dict:
+        """Record a real-user intervention approval (production M1 gate)."""
+        state = self.engine.project(case_id)
+        if state is None:
+            raise KeyError(case_id)
+        if experiment_id not in state.experiments:
+            raise ValidationError(
+                "experiment_id does not exist",
+                {"experiment_id": experiment_id},
+            )
+        if decision not in {"approve", "reject"}:
+            raise ValidationError("decision must be approve or reject", {"decision": decision})
+        self._force_human_task(
+            case_id,
+            [EventType.HUMAN_RESPONSE_RECEIVED.value],
+            f"Human approve/reject intervention {experiment_id}",
+        )
+        msg = message or f"Human {decision} for intervention {experiment_id}"
+        return self.submit(
+            [
+                DomainEvent(
+                    case_id=case_id,
+                    event_type=EventType.HUMAN_RESPONSE_RECEIVED,
+                    timestamp=utc_now(),
+                    producer=AgentRole.HUMAN,
+                    payload={
+                        "message": msg,
+                        "approval_for": experiment_id,
+                        "decision": decision,
+                    },
+                )
+            ]
+        )
+
+    def org_approve(self, case_id: str, *, rationale: str = "") -> dict:
+        """Record a real-user org approval (production M3 gate)."""
+        state = self.engine.project(case_id)
+        if state is None:
+            raise KeyError(case_id)
+        self._force_human_task(
+            case_id,
+            [EventType.ORG_APPROVAL_RECEIVED.value],
+            "Human org approval before FixAccepted",
+        )
+        text = rationale or "Organizational approval granted"
+        return self.submit(
+            [
+                DomainEvent(
+                    case_id=case_id,
+                    event_type=EventType.ORG_APPROVAL_RECEIVED,
+                    timestamp=utc_now(),
+                    producer=AgentRole.HUMAN,
+                    payload={"approved": True, "rationale": text, "message": text},
+                )
+            ]
+        )

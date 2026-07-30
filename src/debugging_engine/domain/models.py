@@ -91,6 +91,12 @@ class InvestigationStatus(StrEnum):
     ABANDONED = "ABANDONED"
 
 
+class InvestigationMode(StrEnum):
+    INVESTIGATE = "investigate"
+    INCIDENT = "incident"
+    PRODUCTION = "production"
+
+
 class EventType(StrEnum):
     CASE_CREATED = "CaseCreated"
     INVESTIGATION_ACTIVATED = "InvestigationActivated"
@@ -116,6 +122,8 @@ class EventType(StrEnum):
     INTERPRETATION_SUBMITTED = "InterpretationSubmitted"
     INTERPRETATION_WITHDRAWN = "InterpretationWithdrawn"
     ROOT_CAUSE_ACCEPTED = "RootCauseAccepted"
+    FIX_ACCEPTED = "FixAccepted"
+    ORG_APPROVAL_RECEIVED = "OrgApprovalReceived"
     INVESTIGATION_CLOSED = "InvestigationClosed"
     VALIDATION_FAILED = "ValidationFailed"
     VERIFICATION_FAILED = "VerificationFailed"
@@ -219,7 +227,9 @@ class CaseState(BaseModel):
     case_id: str
     title: str = ""
     status: InvestigationStatus = InvestigationStatus.CREATED
+    mode: InvestigationMode = InvestigationMode.INCIDENT
     issue_path: str | None = None
+    accepted_root_cause_id: str | None = None
     unknowns: dict[str, Unknown] = Field(default_factory=dict)
     hypotheses: dict[str, Hypothesis] = Field(default_factory=dict)
     experiments: dict[str, Experiment] = Field(default_factory=dict)

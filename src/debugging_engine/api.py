@@ -8,7 +8,7 @@ from typing import Any, Sequence
 from debugging_engine.application.judge import Task
 from debugging_engine.application.metrics import CaseMetrics, compute_case_metrics
 from debugging_engine.application.service import CaseService
-from debugging_engine.domain.models import DomainEvent
+from debugging_engine.domain.models import DomainEvent, InvestigationMode
 from debugging_engine.policies import DefaultSchedulingPolicy, SchedulingPolicy
 
 
@@ -44,12 +44,18 @@ class Case:
         self.case_id = case_id
 
     @classmethod
-    def open(cls, engine: Engine, issue_path: str | Path) -> Case:
+    def open(
+        cls,
+        engine: Engine,
+        issue_path: str | Path,
+        *,
+        mode: InvestigationMode | str = InvestigationMode.INCIDENT,
+    ) -> Case:
         """Create a Case + Unknown from an issue markdown file."""
         path = Path(issue_path)
         if not path.is_absolute():
             path = engine.repo_root / path
-        case_id, _events = engine.service.open_issue(path)
+        case_id, _events = engine.service.open_issue(path, mode=mode)
         return cls(engine, case_id)
 
     @classmethod
@@ -94,3 +100,22 @@ class Case:
 
     def metrics(self) -> CaseMetrics:
         return compute_case_metrics(self.engine.service.store, self.case_id)
+
+    def human_approve(
+        self,
+        experiment_id: str,
+        *,
+        decision: str = "approve",
+        message: str = "",
+    ) -> dict[str, Any]:
+        """Real-user intervention approval (production mode)."""
+        return self.engine.service.human_approve_intervention(
+            self.case_id,
+            experiment_id,
+            decision=decision,
+            message=message,
+        )
+
+    def org_approve(self, *, rationale: str = "") -> dict[str, Any]:
+        """Real-user org approval before FixAccepted (production mode)."""
+        return self.engine.service.org_approve(self.case_id, rationale=rationale)

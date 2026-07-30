@@ -99,10 +99,11 @@ After new SUPPORTS evidence, Judge typically schedules an **Adversary** rebuttal
 
 ### Skills: investigate vs incident
 
-| Skill | Mode | Interventions / Implementer |
+| Skill | Open mode | Interventions / Implementer |
 | --- | --- | --- |
-| `debugging-engine-investigate` | Report-only | **Forbidden.** Accept root cause on observational evidence; write `issues/<slug>.md`; fix later via incident. |
-| `debugging-engine-incident` | Fix | **Allowed.** Propose `experiment_class=intervention` + `patch`, Implementer, verify, then accept. |
+| `debugging-engine-investigate` | `--mode investigate` | **Forbidden.** `RootCauseAccepted` resolves; write `issues/<slug>.md`; fix later via incident. |
+| `debugging-engine-incident` | `--mode incident` (default) | **Allowed.** Cause via `RootCauseAccepted`, then `FixAccepted` after a verified intervention. |
+| `debugging-engine-incident` (prod) | `--mode production` | Same as incident + Human approve for HIGH/CRITICAL interventions + `OrgApprovalReceived` before `FixAccepted`. |
 
 ### RootCauseAccepted
 
@@ -120,10 +121,56 @@ Kernel gates (all required):
 - At least one SUPPORTS interpretation for `hypothesis_id`, linked to recorded evidence
 - Every piece of evidence from a terminal experiment (COMPLETED/FAILED) has an interpretation
 - At least one verification with `passed: true` and experiment COMPLETED
-- If any intervention/patched experiment exists, one of them must have passed
 - Competing hypotheses are rejected or suspended
 
-Investigate (report-only) must not create intervention experiments, so the intervention gate does not apply.
+`RootCauseAccepted` proves cause. It resolves the case immediately only in `investigate` mode, or in `incident` mode when **no** intervention/patch experiments exist. Otherwise the case stays ACTIVE until `FixAccepted`.
+
+### FixAccepted
+
+```json
+{
+  "rationale": "intervention verified; ship the fix",
+  "authority": "Judge"
+}
+```
+
+Requires prior `RootCauseAccepted`, a successful intervention, and (in `production`) prior `OrgApprovalReceived`. Transitions the case to `RESOLVED`.
+
+### Human intervention approval (production)
+
+**Real user only.** The coding agent must stop and ask; do not auto-submit.
+
+```bash
+debugging-engine human-approve <case-id> <experiment-id> --decision approve
+# or: --decision reject
+```
+
+Equivalent event (producer `Human`):
+
+```json
+{
+  "message": "Approve risky patch",
+  "approval_for": "<experiment-id>",
+  "decision": "approve"
+}
+```
+
+### OrgApprovalReceived (production)
+
+**Real user only.**
+
+```bash
+debugging-engine org-approve <case-id> --rationale "CAB signed off"
+```
+
+```json
+{
+  "approved": true,
+  "rationale": "change advisory board signed off"
+}
+```
+
+Producer must be `Human`.
 
 ### InvestigationEscalated
 
@@ -151,6 +198,7 @@ Adversary `HypothesisProposed` and `InterpretationSubmitted` events **must** inc
 
 - Max **5** active hypotheses per Unknown.
 - Evidence observations truncated (~2 KiB).
-- Stall cycles → Judge asks to escalate.
+- Stall cycles → Human (real user), then Judge escalate.
 - One Judge Task at a time (Spec §10 parallel execution is not implemented in the package).
-- After SUPPORTS with no pending intervention, Judge may accept root cause (report-only). Propose an intervention only when running the **incident** skill.
+- After SUPPORTS, Judge may accept root cause; incident/production still need `FixAccepted` when interventions exist.
+- Production Human gates are not agent-playable: wait for the user or the `human-approve` / `org-approve` CLI.
