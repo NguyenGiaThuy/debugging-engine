@@ -23,6 +23,13 @@ Prefer starting from an existing `issues/<slug>.md` brief (from investigate). If
 5. Competing hypotheses must be rejected or suspended before accept.
 6. After new SUPPORTS evidence, expect Adversary rebuttal before approve/accept.
 7. Event `producer` must match Task `role`. Never forge Adversary/Implementer producers.
+8. **Visible handoffs (mandatory):** After every `debugging-engine next`, before any `submit` / `verify` / patch work, print:
+
+```text
+**Role: <role>** — <objective>
+```
+
+Announce **Judge every time** they approve or accept (not only the first approve). Announce **Verifier** before every `verify`, and **Implementer** before every `PatchApplied`. Silent role turns are a rule violation.
 
 ## Loop
 
@@ -31,7 +38,7 @@ open issues/<slug>.md → next → …
   → Adversary → Judge approve → Verifier (observe) → interpret → …
   → Analyst proposes intervention → Adversary (if needed) → Judge approve
   → Implementer (PatchApplied) → Verifier → interpret → …
-  → RootCauseAccepted
+  → Judge RootCauseAccepted
   → or Escalated (groundbreaking / safety / human-only / blocked access)
 ```
 
@@ -39,16 +46,9 @@ open issues/<slug>.md → next → …
 
 - **Analyst:** hypotheses + experiments; after supporting evidence, propose intervention patches (do not self-approve or apply them as Analyst).
 - **Adversary:** competing hypotheses/interpretations; announce every handoff.
-- **Implementer:** materialize approved patches; submit `PatchApplied`.
-- **Verifier:** `debugging-engine verify <case-id> <experiment-id>`.
-- **Judge:** approve / accept / escalate.
-
-Announce every role handoff:
-
-```text
-**Role: <role>** — <objective>
-```
-
+- **Implementer:** announce, then materialize approved patches; submit `PatchApplied`.
+- **Verifier:** announce, then `debugging-engine verify <case-id> <experiment-id>`.
+- **Judge:** announce, then approve / accept / escalate — once per Task, every Task.
 ## Production extras
 
 1. Capture SEV symptoms: impact, start time, recent deploys, dashboards, blast radius.

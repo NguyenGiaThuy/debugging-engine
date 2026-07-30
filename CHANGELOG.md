@@ -4,6 +4,15 @@ All notable changes to the **debugging-engine** package are recorded here.
 The architecture specification remains **Debugging Engine v1.0.0** (`docs/SPECIFICATION.md`);
 package versions below are kernel / CLI releases that implement subsets of that spec.
 
+## [1.0.9] — 2026-07-30
+
+### Changed
+- Skills require a visible `**Role: <role>** — <objective>` line after every `next` (including every Judge/Verifier turn).
+- Judge Task `hints` always include `ANNOUNCE_HANDOFF_HINT` so projections reinforce the chat handoff rule.
+
+### Added
+- Incident scene `issues/009` + `scenes/rate_limit/` (token bucket never refills; fixed via elapsed-time refill).
+
 ## [1.0.8] — 2026-07-30
 
 ### Changed

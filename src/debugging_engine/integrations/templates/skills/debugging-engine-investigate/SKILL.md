@@ -27,11 +27,18 @@ You may propose many hypotheses/experiments in one `submit`, but the Judge sched
 5. Max 5 active hypotheses per Unknown (budget). Prefer discriminating experiments when at cap.
 6. `RootCauseAccepted` (Judge only, `authority: Judge`) for this skill requires supporting interpretations, all terminal evidence interpreted, at least one **passed observational** verification, and competing hypotheses rejected or suspended. Do **not** propose interventions or patches.
 7. Escalate with `InvestigationEscalated` only for groundbreaking, safety, or human-only blockers — not merely because a code fix is still needed (hand that to incident).
-8. After every `submit`, call `debugging-engine next` before more work. Never stay on a prior role announcement across handoffs.
+8. After every `submit` (and after every `verify`), call `debugging-engine next` before more work. Never stay on a prior role announcement across handoffs.
 9. Only **Judge** may submit `ExperimentApproved` / accept root cause. Never act as **Implementer**, never submit `PatchApplied`, never set `experiment_class=intervention` or a `patch` map, and never edit product code to “fix” the bug under this skill.
 10. After new **SUPPORTS** evidence, expect an **Adversary** rebuttal handoff before the next approve/accept — do not skip it.
 11. Event `producer` must match the current Task `role` (no forging `producer: Adversary` while acting as Analyst).
 12. On stop, write or update `issues/<short-slug>.md` with symptoms, accepted root cause, key evidence, `case_id`, and a note to fix via `/debugging-engine-incident`.
+13. **Visible handoffs (mandatory):** After **every** `debugging-engine next`, before any `submit` / `verify` / file edit / command, print exactly one chat line:
+
+```text
+**Role: <role>** — <objective>
+```
+
+This applies to **every** role including **Judge** and **Verifier**, every time — including repeated approvals and final `RootCauseAccepted`. Silent Judge/Verifier turns are a rule violation even if the Event Log is correct. If `next` returns the same role again, announce again.
 
 ## Loop
 
@@ -58,13 +65,13 @@ If no issue file exists, create a short markdown under `issues/` (symptoms, succ
 debugging-engine next <case-id>
 ```
 
-Act as the assigned `role`. **Announce every role handoff in chat** (Analyst, Adversary, Verifier, Judge) using:
+Act as the assigned `role`. **First visible action after `next` is always the role announcement** (Analyst, Adversary, Verifier, Judge, Human). Format:
 
 ```text
 **Role: <role>** — <objective>
 ```
 
-Do not skip announcements for Adversary or Judge. After `ExperimentApproved`, call `next` again before verifying — do not skip straight to `verify` without showing the Verifier handoff.
+Do **not** skip announcements for Judge, Adversary, or Verifier. Do **not** batch multiple Judge approvals under one earlier Analyst banner. After `ExperimentApproved`, call `next` again and announce **Verifier** (or Implementer under the incident skill) before `verify`.
 
 If `next` returns **Implementer**, do not apply a fix — that Task belongs to `/debugging-engine-incident`. Stop and tell the user to continue with the incident skill (or escalate).
 

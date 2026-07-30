@@ -1,6 +1,6 @@
 # Debugging Engine
 
-**Package:** `debugging-engine` **1.0.8** (PyPI / CLI). Architecture spec remains **Debugging Engine v1.0.0** — see [`docs/SPECIFICATION.md`](docs/SPECIFICATION.md) and [`CHANGELOG.md`](CHANGELOG.md).
+**Package:** `debugging-engine` **1.0.9** (PyPI / CLI). Architecture spec remains **Debugging Engine v1.0.0** — see [`docs/SPECIFICATION.md`](docs/SPECIFICATION.md) and [`CHANGELOG.md`](CHANGELOG.md).
 
 **Debugging Engine** (State Machine–Driven Agentic Debugging Workflow) is an **investigation kernel**, not a chat agent.
 
@@ -101,7 +101,7 @@ Full surface: [`docs/api.md`](docs/api.md).
 Architecture specification **Debugging Engine v1.0.0**: [`docs/SPECIFICATION.md`](docs/SPECIFICATION.md).
 Package release notes: [`CHANGELOG.md`](CHANGELOG.md).
 
-The published kernel implements **serial** Judge scheduling (one Task at a time). Spec §10 parallel experiment execution is architectural capability, **not** implemented in package 1.0.8.
+The published kernel implements **serial** Judge scheduling (one Task at a time). Spec §10 parallel experiment execution is architectural capability, **not** implemented in package 1.0.9.
 
 Skills: `/debugging-engine-investigate` is **report-only** (write `issues/`, no Implementer). `/debugging-engine-incident` owns the fix loop.
 

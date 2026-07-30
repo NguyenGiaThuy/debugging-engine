@@ -1,12 +1,12 @@
 # Debugging Engine public API
 
-**Status:** Stable for Phase 3+ (package `1.0.8`).
+**Status:** Stable for Phase 3+ (package `1.0.9`).
 
 Debugging Engine is an **agent-agnostic investigation kernel**. This API does **not** run Analyst/Adversary/Implementer LLMs. Coding agents call these methods (or the CLI) to advance Case State.
 
 Release notes: [`CHANGELOG.md`](../CHANGELOG.md). Architecture: [`SPECIFICATION.md`](SPECIFICATION.md) (v1.0.0).
 
-## Kernel invariants (package 1.0.8)
+## Kernel invariants (package 1.0.9)
 
 - Judge schedules **one** Task at a time (Spec §10 parallel orchestration is not implemented).
 - `submit` events must use types allowed by the current Task **and** `producer` matching that Task `role`.

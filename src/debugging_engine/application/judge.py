@@ -23,6 +23,12 @@ from debugging_engine.domain.policies import (
     STALL_CYCLES_BEFORE_ESCALATION,
 )
 
+# Shown on every Task so coding agents cannot silently act as Judge/Verifier/etc.
+ANNOUNCE_HANDOFF_HINT = (
+    "Announce this handoff in chat as `**Role: <role>** — <objective>` "
+    "before any submit/verify/patch. Silent role turns are forbidden."
+)
+
 
 class Task(BaseModel):
     """Handoff from Judge to an external coding agent (or stub)."""
@@ -240,6 +246,7 @@ def _adversary_rebuttal_task(state: CaseState, evidence_ids: list[str]) -> Task:
             "unrebutted_evidence_ids": evidence_ids,
         },
         hints=[
+            ANNOUNCE_HANDOFF_HINT,
             "Announce this Adversary handoff in chat before challenging.",
             "Object using a defined category, or concede with an explicit interpretation.",
         ],
@@ -295,6 +302,7 @@ def schedule_next_task(state: CaseState) -> Task:
                     "threshold": STALL_CYCLES_BEFORE_ESCALATION,
                 },
                 hints=[
+                    ANNOUNCE_HANDOFF_HINT,
                     "Submit HumanResponseReceived as producer Human.",
                     "Waiting indefinitely is prohibited (Part IV starvation policy).",
                 ],
@@ -315,7 +323,10 @@ def schedule_next_task(state: CaseState) -> Task:
                 "stall_cycles": stall,
                 "threshold": STALL_CYCLES_BEFORE_ESCALATION,
             },
-            hints=["Waiting indefinitely is prohibited (Part IV starvation policy)."],
+            hints=[
+                ANNOUNCE_HANDOFF_HINT,
+                "Waiting indefinitely is prohibited (Part IV starvation policy).",
+            ],
         )
 
     # Need hypotheses?
@@ -333,6 +344,7 @@ def schedule_next_task(state: CaseState) -> Task:
             ],
             projection=_slice_for_role(state, AgentRole.ANALYST),
             hints=[
+                ANNOUNCE_HANDOFF_HINT,
                 "Declare assumptions explicitly.",
                 "Estimate information_gain and cost qualitatively.",
                 f"Active hypothesis budget per Unknown: {MAX_ACTIVE_HYPOTHESES_PER_UNKNOWN}.",
@@ -378,6 +390,7 @@ def schedule_next_task(state: CaseState) -> Task:
                     "metrics": _metrics_summary(state),
                 },
                 hints=[
+                    ANNOUNCE_HANDOFF_HINT,
                     "Announce this Implementer handoff in chat before writing files.",
                     "Write patch files under the repo root exactly as specified.",
                     "After PatchApplied, the next task should be Verifier.",
@@ -405,6 +418,7 @@ def schedule_next_task(state: CaseState) -> Task:
                 "metrics": _metrics_summary(state),
             },
             hints=[
+                ANNOUNCE_HANDOFF_HINT,
                 "Announce this Verifier handoff in chat before running verify.",
                 "Prefer `debugging-engine verify <case-id> <experiment-id>` rather than hand-writing evidence.",
             ],
@@ -449,6 +463,7 @@ def schedule_next_task(state: CaseState) -> Task:
                 "budget_remaining": budget_remaining(state, unk_id),
             },
             hints=[
+                ANNOUNCE_HANDOFF_HINT,
                 "Announce this Adversary handoff in chat before challenging.",
                 "Objections must use a defined category.",
                 "Prefer experiments that discriminate.",
@@ -490,7 +505,10 @@ def schedule_next_task(state: CaseState) -> Task:
                 },
                 "metrics": _metrics_summary(state),
             },
-            hints=["Submit ExperimentApproved then optionally ExperimentScheduled."],
+            hints=[
+                ANNOUNCE_HANDOFF_HINT,
+                "Submit ExperimentApproved then optionally ExperimentScheduled.",
+            ],
         )
 
     completed = [
@@ -541,7 +559,10 @@ def schedule_next_task(state: CaseState) -> Task:
                     EventType.EXPERIMENT_PROPOSED.value,
                 ],
                 projection=_slice_for_role(state, AgentRole.ADVERSARY),
-                hints=["Announce this Adversary handoff in chat before challenging."],
+                hints=[
+                    ANNOUNCE_HANDOFF_HINT,
+                    "Announce this Adversary handoff in chat before challenging.",
+                ],
             )
 
     unrebutted = unrebutted_supports_evidence_ids(state)
@@ -618,6 +639,7 @@ def schedule_next_task(state: CaseState) -> Task:
                     "report_only": not successful_fix,
                 },
                 hints=[
+                    ANNOUNCE_HANDOFF_HINT,
                     "Investigate skill: accept and write issues/<slug>.md; fix via incident skill.",
                     "Incident skill: may still propose experiment_class=intervention before accept.",
                 ],
@@ -640,6 +662,7 @@ def schedule_next_task(state: CaseState) -> Task:
                 "metrics": _metrics_summary(state),
             },
             hints=[
+                ANNOUNCE_HANDOFF_HINT,
                 "Prefer completing the pending intervention verification before accept.",
                 "Escalate only for groundbreaking, safety, or human-only blockers.",
             ],
@@ -657,6 +680,7 @@ def schedule_next_task(state: CaseState) -> Task:
         ],
         projection=_slice_for_role(state, AgentRole.ANALYST),
         hints=[
+            ANNOUNCE_HANDOFF_HINT,
             "Starvation policy: waiting indefinitely is prohibited.",
             "Escalate only for groundbreaking, safety, or human-only blockers.",
         ],
