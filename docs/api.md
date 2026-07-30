@@ -1,8 +1,18 @@
 # Debugging Engine public API
 
-**Status:** Stable for Phase 3+ (package `1.0.6`).
+**Status:** Stable for Phase 3+ (package `1.0.7`).
 
 Debugging Engine is an **agent-agnostic investigation kernel**. This API does **not** run Analyst/Adversary/Implementer LLMs. Coding agents call these methods (or the CLI) to advance Case State.
+
+Release notes: [`CHANGELOG.md`](../CHANGELOG.md). Architecture: [`SPECIFICATION.md`](SPECIFICATION.md) (v1.0.0).
+
+## Kernel invariants (package 1.0.7)
+
+- Judge schedules **one** Task at a time (Spec §10 parallel orchestration is not implemented).
+- `submit` events must use types allowed by the current Task **and** `producer` matching that Task `role`.
+- Unexpected verify exit → experiment **FAILED** (not COMPLETED); patches / `working_directory` are path-contained.
+- After unrebutted SUPPORTS evidence, Judge re-engages Adversary before the next approve/accept.
+- `RootCauseAccepted` requires Judge producer + `authority: Judge`, supporting interpretations, all terminal evidence interpreted, a passed verification, successful intervention when any patched experiment exists, and disposed competitors.
 
 ## Install
 

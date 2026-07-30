@@ -1,6 +1,8 @@
 # Verify path escape and experiment lifecycle inconsistencies
 
-## Symptoms
+**Status:** Fixed in **1.0.3+** (path containment, verify→FAILED, RootCause gates, atomic `append_many`). Covered by `tests/test_loop_hardening.py`, `tests/test_store_atomicity.py`, `tests/test_adversary_reengage.py`.
+
+## Symptoms (historical)
 Static review of `src/debugging_engine` found concrete integrity issues that the current suite (45 passing tests) does not cover:
 
 1. **Patch path traversal in verification** (`infrastructure/verify.py`): experiment patches are written via `repo_root / rel_path` with no containment check. Paths like `../outside.txt` or absolute paths can write outside the repo.

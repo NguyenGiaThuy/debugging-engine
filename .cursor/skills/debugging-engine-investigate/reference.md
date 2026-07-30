@@ -32,6 +32,8 @@ Every submitted event needs:
 
 `event_id`, `correlation_id` may be omitted (kernel generates defaults).
 
+**Producer:** must equal the current Judge Task `role` (e.g. do not submit `producer: "Adversary"` while the Task role is Analyst). Event `schema_version` is currently `"1.0.0"` (envelope schema), independent of the PyPI package version.
+
 ## Common payloads
 
 ### HypothesisProposed
@@ -45,6 +47,8 @@ Every submitted event needs:
   "assumptions": ["..."]
 }
 ```
+
+Optional `"parent_id": "<hyp-id>"` links a child hypothesis (same Unknown; rejecting the parent rejects descendants).
 
 ### ExperimentProposed
 
@@ -69,6 +73,8 @@ Every submitted event needs:
 
 For interventions, set `"experiment_class": "intervention"` and optional `"patch": {"relative/path.py": "file contents"}`.
 
+Patch map keys and `working_directory` must be relative paths **inside** the repo (no `..` segments, no absolute paths). Escaping paths are rejected at propose/verify time.
+
 ### ExperimentApproved
 
 ```json
@@ -89,6 +95,8 @@ For interventions, set `"experiment_class": "intervention"` and optional `"patch
 
 `outcome`: `SUPPORTS` | `WEAKENS` | `INCONCLUSIVE`.
 
+After new SUPPORTS evidence, Judge typically schedules an **Adversary** rebuttal before the next approve/accept.
+
 ### RootCauseAccepted
 
 ```json
@@ -99,11 +107,24 @@ For interventions, set `"experiment_class": "intervention"` and optional `"patch
 }
 ```
 
+Kernel gates (all required):
+
+- Producer and `authority` are **Judge**
+- At least one SUPPORTS interpretation for `hypothesis_id`, linked to recorded evidence
+- Every piece of evidence from a terminal experiment (COMPLETED/FAILED) has an interpretation
+- At least one verification with `passed: true` and experiment COMPLETED
+- If any intervention/patched experiment exists, one of them must have passed
+- Competing hypotheses are rejected or suspended
+
 ### InvestigationEscalated
 
 ```json
 { "reason": "why autonomous investigation cannot continue" }
 ```
+
+## Verify outcomes
+
+`debugging-engine verify` runs the Verification Spec. Unexpected exit codes record evidence and mark the experiment **FAILED** (not COMPLETED). Interpret that evidence, then propose the next experiment.
 
 ## Qualitative levels
 
@@ -120,3 +141,4 @@ For interventions, set `"experiment_class": "intervention"` and optional `"patch
 - Max **5** active hypotheses per Unknown.
 - Evidence observations truncated (~2 KiB).
 - Stall cycles → Judge asks to escalate.
+- One Judge Task at a time (Spec §10 parallel execution is not implemented in the package).

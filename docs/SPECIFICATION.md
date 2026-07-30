@@ -10,6 +10,14 @@
 | **Normative** | Required for Debugging Engine compliance. Implementations MUST satisfy these requirements. |
 | **Informative** | Guidance and examples. Implementations MAY differ provided normative parts are satisfied. |
 
+## Package implementation note (informative)
+
+The PyPI package `debugging-engine` (see [`CHANGELOG.md`](../CHANGELOG.md)) is a concrete kernel implementing this specification with the following current deltas:
+
+- **Serial Judge scheduling only** — one next Task at a time. Part IV §10 parallel experiment execution is **not** implemented in the package yet.
+- **Stricter acceptance gates** than the minimal wording in some chapters — `RootCauseAccepted` requires Judge producer/authority, supporting interpretations, interpreted terminal evidence, passed verification, intervention success when patches exist, and disposed competitors (see package validation).
+- Event envelope `schema_version` remains `"1.0.0"` and is independent of the PyPI package version.
+
 ## Precedence
 
 1. If any later chapter contradicts Part I, Part I takes precedence unless the change is recorded in an Architecture Decision Record (ADR).
@@ -2041,6 +2049,8 @@ Experiments MAY execute concurrently only when:
 * organizational policy permits.
 
 Parallelism is therefore explicit rather than opportunistic.
+
+> **Package note (informative):** `debugging-engine` 1.0.x implements **serial** Judge scheduling only (one Task / approve / verify path at a time). Concurrent experiment orchestration from this section is not available in the published kernel yet.
 
 ---
 

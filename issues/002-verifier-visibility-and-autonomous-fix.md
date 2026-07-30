@@ -1,6 +1,8 @@
 # Verifier visibility and missing autonomous fix loop
 
-## Symptoms
+**Status:** Fixed in **1.0.3+** (Implementer/Verifier scheduling, intervention-before-accept, skill handoff rules). Covered by `tests/test_scheduling_autonomy.py` and investigate skill loop.
+
+## Symptoms (historical)
 1. During investigations, the Verifier role does not appear as a distinct step in chat, so it is unclear whether verification is scheduled or evidence is being collected correctly.
 2. Investigations stop at reporting / escalation instead of implementing and verifying fixes. Spec and demo intend intervention experiments with patches; the live skill/Judge path escalates too early. User expects full autonomy through fix, escalating only for groundbreaking/safety/human-only cases.
 

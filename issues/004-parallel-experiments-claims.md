@@ -1,6 +1,8 @@
 # Are parallel-experiment / race-condition claims accurate?
 
-## Symptoms
+**Status:** Closed as audit findings confirmed in **1.0.3+**. Serial Judge scheduling documented in README; per-case file lock + atomic `append_many` landed. Spec §10 parallel orchestration remains **not implemented** (intentional gap, not a regression).
+
+## Symptoms (historical)
 A prior assistant answer claimed:
 1. Analyst may batch-propose many hypotheses/experiments into Case State.
 2. Judge schedules only one next action at a time (one runnable or one proposed).

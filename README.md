@@ -1,5 +1,7 @@
 # Debugging Engine
 
+**Package:** `debugging-engine` **1.0.7** (PyPI / CLI). Architecture spec remains **Debugging Engine v1.0.0** — see [`docs/SPECIFICATION.md`](docs/SPECIFICATION.md) and [`CHANGELOG.md`](CHANGELOG.md).
+
 **Debugging Engine** (State Machine–Driven Agentic Debugging Workflow) is an **investigation kernel**, not a chat agent.
 
 Coding agents (Cursor, Claude Code, Copilot, Codex, …) drive it through a CLI or the Python library. The engine owns Case State, the Event Log, validation, projections, and Judge scheduling. It does **not** embed an LLM.
@@ -96,7 +98,10 @@ Full surface: [`docs/api.md`](docs/api.md).
 
 ## Specification
 
-Debugging Engine **v1.0.0** specification: [`docs/SPECIFICATION.md`](docs/SPECIFICATION.md).
+Architecture specification **Debugging Engine v1.0.0**: [`docs/SPECIFICATION.md`](docs/SPECIFICATION.md).
+Package release notes: [`CHANGELOG.md`](CHANGELOG.md).
+
+The published kernel implements **serial** Judge scheduling (one Task at a time). Spec §10 parallel experiment execution is architectural capability, **not** implemented in package 1.0.7.
 
 | Parts | Status |
 | --- | --- |
@@ -109,6 +114,9 @@ Debugging Engine **v1.0.0** specification: [`docs/SPECIFICATION.md`](docs/SPECIF
 | --- | --- |
 | `docs/SPECIFICATION.md` | Official Debugging Engine v1.0.0 specification |
 | `docs/api.md` | Public framework API |
+| `CHANGELOG.md` | Package release notes |
 | `src/debugging_engine/` | Kernel, CLI, skill templates, offline fixtures |
 | `.cursor/skills/` | Cursor skills (synced from package templates) |
+| `issues/` | Kernel audits (001–005 closed) + incident briefs (006–008) |
+| `scenes/` | Local incident reproduction fixtures |
 | `.debugging-engine/cases/` | Local Event Logs (gitignored) |

@@ -19,14 +19,14 @@ You may propose many hypotheses/experiments in one `submit`, but the Judge sched
 ## Rules
 
 1. Advance the case only through `debugging-engine` CLI or the `debugging-engine` Python API (`Case` / `Engine`).
-2. Follow the Judge `Task` from `debugging-engine next`: respect `role`, `allowed_event_types`, and projection. The kernel **rejects** submits whose event types are outside the current Task.
-3. Never invent evidence. Run `debugging-engine verify` for Verification Specs. Unexpected exit codes mark the experiment **FAILED** (not COMPLETED); interpret the evidence, then propose the next experiment.
+2. Follow the Judge `Task` from `debugging-engine next`: respect `role`, `allowed_event_types`, and projection. The kernel **rejects** submits whose event types are outside the current Task, and whose `producer` does not match that Task `role`.
+3. Never invent evidence. Run `debugging-engine verify` for Verification Specs. Unexpected exit codes mark the experiment **FAILED** (not COMPLETED); interpret the evidence, then propose the next experiment. Patch paths and `working_directory` must stay inside the repo (no `..` / absolute escapes).
 4. Hypotheses need experiments; do not promote on persuasion alone. Optional `parent_id` links child hypotheses; rejecting a parent rejects its descendants.
 5. Max 5 active hypotheses per Unknown (budget). Prefer discriminating experiments when at cap.
-6. Drive through a verified **intervention fix** before `RootCauseAccepted` when a code fix is in scope.
+6. `RootCauseAccepted` (Judge only, `authority: Judge`) requires supporting interpretations, all terminal evidence interpreted, at least one passed verification, a successful intervention when any patched/intervention experiment exists, and competing hypotheses rejected or suspended.
 7. Escalate with `InvestigationEscalated` only for groundbreaking, safety, or human-only blockers — not merely because multiple defects were found.
 8. After every `submit`, call `debugging-engine next` before more work. Never stay on a prior role announcement across handoffs.
-9. Only **Judge** may submit `ExperimentApproved` / accept root cause (`authority: Judge` required). Analyst must never self-approve, declare "claims confirmed," run `verify`, or apply intervention patches unless the current Task role is Implementer/Verifier. `PatchApplied` requires Implementer.
+9. Only **Judge** may submit `ExperimentApproved` / accept root cause. Analyst must never self-approve, declare "claims confirmed," run `verify`, or apply intervention patches unless the current Task role is Implementer/Verifier. `PatchApplied` requires Implementer.
 10. After new **SUPPORTS** evidence, expect an **Adversary** rebuttal handoff before the next approve/accept — do not skip it.
 11. Event `producer` must match the current Task `role` (no forging `producer: Adversary` while acting as Analyst).
 
@@ -83,7 +83,7 @@ Immediately call `next` again. Do not continue reasoning as the previous role.
 
 ### 5. Stop when
 
-- `status` is `RESOLVED` with `RootCauseAccepted` **after** a successful intervention verification when a fix was required, or
+- `status` is `RESOLVED` with `RootCauseAccepted` meeting the gate in rule 6 (including a verified intervention when a fix was in scope), or
 - `ESCALATED` with a clear groundbreaking / safety / human-only reason.
 
 Summarize for the user: unknown, accepted root cause (or escalation), key evidence, case id, and whether a fix was applied.

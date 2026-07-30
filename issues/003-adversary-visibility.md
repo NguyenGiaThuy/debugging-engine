@@ -1,6 +1,8 @@
 # Adversary role not visible in chat / may be starved
 
-## Symptoms
+**Status:** Fixed in **1.0.3–1.0.5** (Adversary-before-approve, unrebutted-SUPPORTS re-engage, producer↔role match, skill announce). Covered by `tests/test_scheduling_autonomy.py`, `tests/test_adversary_reengage.py`.
+
+## Symptoms (historical)
 During investigations, the Adversary handoff does not appear in chat (same class of complaint as Verifier). Users cannot tell whether dialectic challenge is scheduled.
 
 ## Clues

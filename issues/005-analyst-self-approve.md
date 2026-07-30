@@ -1,6 +1,8 @@
 # Analyst proposes then self-approves / self-implements
 
-## Symptoms
+**Status:** Fixed in **1.0.3–1.0.5** (Judge-only approve/accept, Task `allowed_event_types` + producer↔role match, Adversary/Implementer/Verifier handoffs). Covered by `tests/test_scheduling_autonomy.py`, `tests/test_loop_hardening.py`, `tests/test_adversary_reengage.py`.
+
+## Symptoms (historical)
 During live investigations, the coding agent stays on **Role: Analyst** from hypothesis proposal through claim confirmation and code implementation. There is no Judge handoff to approve experiments, no Verifier/Implementer scheduling, and no Adversary challenge before the Analyst declares claims confirmed and implements a fix.
 
 Observed chat pattern (single Analyst segment):
